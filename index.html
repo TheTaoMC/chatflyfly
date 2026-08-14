@@ -6,54 +6,84 @@
 <link rel="icon" href="data:," /> <!-- ไม่ให้ browser ขอ favicon แล้วเจอ 404 -->
 <title>กลุ่มแชท</title>
 <style>
+  /* ═══════════ ธีม pixel art retro (arcade/CRT) ═══════════ */
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: row; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: row;
+    font-family: "Courier New", ui-monospace, monospace;
+    background: #0e0b16; color: #e8e6f0;
+  }
+  /* scanline เหมือนจอ CRT (อยู่ใต้ modal/panel ไม่บังการคลิก) */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 2px, transparent 2px 4px);
+  }
   #chatSide { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   /* ---- ร้านตัวละคร (ฝั่งซ้าย) ---- */
-  #shop { width: 200px; background: #2e1f2e; border-right: 4px solid #141414; display: flex; flex-direction: column; overflow: hidden; }
-  #shop h3 { margin: 0; padding: 10px 8px; color: #ffd54f; font-size: 13px; letter-spacing: 1px; background: #1f1420; border-bottom: 2px solid #141414; font-family: monospace; }
+  #shop { width: 200px; background: #171122; border-right: 4px solid #0a0713; display: flex; flex-direction: column; overflow: hidden; }
+  #shop h3 { margin: 0; padding: 10px 8px; color: #ffcc00; font-size: 13px; letter-spacing: 2px; background: #241b3b; border-bottom: 3px solid #0a0713; text-shadow: 2px 2px 0 #000; }
   #shopGrid { flex: 1; overflow-y: auto; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 10px; }
   .char { text-align: center; }
   .char img { width: 48px; height: 48px; image-rendering: pixelated; display: block; margin: 0 auto; }
-  .char.me img { outline: 2px solid #ffd54f; }
-  .char-name { color: #eee; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .char.me .char-name { color: #ffd54f; font-weight: 700; }
-  #shopGrid .empty { color: #888; font-size: 12px; text-align: center; padding: 20px 0; font-family: monospace; }
-  #floor { height: 26px; background: repeating-linear-gradient(90deg, #6b4a2f 0 24px, #5a3d26 24px 48px); border-top: 2px solid #141414; }
-  @media (max-width: 640px) {
-    body { flex-direction: column; }
-    #shop { width: 100%; max-height: 118px; border-right: none; border-bottom: 4px solid #141414; flex-direction: row; }
-    #shop h3 { display: none; }
-    #shopGrid { flex-direction: row; overflow-x: auto; padding: 6px 8px; gap: 8px; }
-    #floor { display: none; }
-  }
-  header { background: #075e54; color: #fff; padding: 12px 16px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
-  #nameBtn { background: rgba(255,255,255,.15); padding: 6px 14px; font-size: 14px; font-weight: 600; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .msg { max-width: 70%; padding: 8px 12px; border-radius: 12px; background: #fff; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-  .msg.me { background: #dcf8c6; align-self: flex-end; }
-  .msg .name { font-size: 12px; font-weight: 700; color: #128c7e; }
-  .msg .time { font-size: 11px; color: #999; float: right; margin-left: 8px; margin-top: 4px; }
-  form { display: flex; gap: 8px; padding: 12px; background: #fff; border-top: 1px solid #ddd; }
-  input[type="text"] { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 20px; font-size: 15px; }
-  button { padding: 10px 20px; border: none; border-radius: 20px; background: #075e54; color: #fff; font-size: 15px; cursor: pointer; }
-  .msg img { max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 6px; cursor: pointer; }
-  #gifPanel { position: fixed; bottom: 70px; left: 12px; right: 12px; max-width: 520px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.25); display: none; overflow: hidden; z-index: 9; }
-  #gifSearch { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #eee; font-size: 14px; outline: none; }
+  .char.me img { outline: 3px solid #ffcc00; box-shadow: 0 0 0 3px #000; }
+  .char-name { color: #c9c2e6; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char.me .char-name { color: #ffcc00; font-weight: 700; }
+  #shopGrid .empty { color: #6f6890; font-size: 12px; text-align: center; padding: 20px 0; }
+  #floor { height: 26px; background: repeating-linear-gradient(90deg, #6b4a2f 0 24px, #553a24 24px 48px); border-top: 3px solid #0a0713; }
+  header { background: linear-gradient(180deg, #3a2b63, #2a1d4d); color: #ffcc00; padding: 12px 16px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; border-bottom: 4px solid #0a0713; text-shadow: 2px 2px 0 #000; }
+  #nameBtn { background: #241b3b; border: 2px solid #ffcc00; color: #ffcc00; padding: 5px 14px; font-size: 13px; font-weight: 700; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 3px 0 #000; }
+  #headerBtns { display: flex; gap: 8px; }
+  #soundBtn { background: #241b3b; border: 2px solid #4a3d75; color: #00e5ff; padding: 5px 10px; font-size: 13px; box-shadow: 3px 3px 0 #000; }
+  #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 70%; padding: 8px 12px; background: #241b36; border: 2px solid #0a0713; align-self: flex-start; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+  .msg.me { background: #17322a; border-color: #0f5a45; align-self: flex-end; }
+  .msg .name { font-size: 12px; font-weight: 700; color: #00e5ff; }
+  .msg .time { font-size: 11px; color: #8a84a8; float: right; margin-left: 8px; margin-top: 4px; }
+  form { display: flex; gap: 8px; padding: 12px; background: #171122; border-top: 3px solid #0a0713; }
+  input[type="text"] { flex: 1; padding: 10px 12px; border: 2px solid #4a3d75; background: #0e0b16; color: #fff; font-size: 15px; font-family: inherit; }
+  input[type="text"]:focus { outline: none; border-color: #00e5ff; }
+  button { padding: 10px 18px; border: 2px solid #0a0713; background: #3a2b63; color: #ffcc00; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; box-shadow: 3px 3px 0 #000; }
+  button:hover { background: #4a3d75; transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  button:active { transform: translate(3px, 3px); box-shadow: none; }
+  .msg img { max-width: 100%; max-height: 300px; border: 2px solid #0a0713; display: block; margin-top: 6px; cursor: pointer; }
+  #gifPanel { position: fixed; bottom: 70px; left: 12px; right: 12px; max-width: 520px; background: #171122; border: 3px solid #0a0713; box-shadow: 6px 6px 0 rgba(0,0,0,.6); display: none; overflow: hidden; z-index: 9; }
+  #gifSearch { width: 100%; padding: 10px 12px; border: none; border-bottom: 2px solid #4a3d75; background: #0e0b16; color: #fff; font-size: 14px; outline: none; font-family: inherit; }
   #gifGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; max-height: 260px; overflow-y: auto; }
-  #gifGrid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; border-radius: 6px; }
-  #gifGrid .empty { grid-column: 1/-1; text-align: center; color: #999; padding: 20px; font-size: 13px; }
-  #toast { position: fixed; top: 16px; right: 16px; background: #333; color: #fff; padding: 10px 14px; border-radius: 8px; display: none; }
-  #nameModal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 10; }
-  .modal { position: relative; background: #fff; padding: 24px; border-radius: 12px; width: 300px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
-  #modalClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #888; font-size: 16px; padding: 4px 10px; border-radius: 8px; }
-  .modal h3 { margin: 0 0 12px; }
+  #gifGrid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; border: 2px solid #0a0713; }
+  #gifGrid .empty { grid-column: 1/-1; text-align: center; color: #8a84a8; padding: 20px; font-size: 13px; }
+  #toast { position: fixed; top: 16px; right: 16px; background: #2a1d4d; color: #ffcc00; border: 2px solid #0a0713; box-shadow: 3px 3px 0 #000; padding: 10px 14px; display: none; z-index: 6; }
+  #nameModal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal { position: relative; background: #1e1630; border: 3px solid #ffcc00; box-shadow: 8px 8px 0 rgba(0,0,0,.7); padding: 24px; width: 300px; text-align: center; }
+  #modalClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
+  #modalClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
+  .modal h3 { margin: 0 0 12px; color: #ffcc00; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
   .modal input { width: 100%; }
   .modal button { margin-top: 10px; width: 100%; }
-  #modalErr { color: #d32f2f; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  #modalErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; min-height: 18px; }
   #emojiRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin: 10px 0 2px; }
-  #emojiRow button { width: auto; margin: 0; background: none; font-size: 20px; padding: 2px 4px; border-radius: 6px; }
-  #emojiRow button.sel { background: #dcf8c6; outline: 2px solid #075e54; }
+  #emojiRow button { width: auto; margin: 0; background: none; border: 2px solid transparent; font-size: 20px; padding: 2px 4px; box-shadow: none; text-shadow: none; }
+  #emojiRow button:hover { background: none; transform: none; box-shadow: none; }
+  #emojiRow button.sel { background: #ffcc00; border-color: #000; }
+  /* scrollbar พิกเซล */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #4a3d75; border: 2px solid #0a0713; }
+  ::-webkit-scrollbar-track { background: #0e0b16; }
+
+  /* ---- มือถือ: แชทบน ร้านล่าง (ต้องอยู่ท้ายสุด กันกฎ base ชนะ) ---- */
+  @media (max-width: 640px) {
+    body { flex-direction: column; height: 100dvh; } /* dvh = ปรับตาม address bar บนมือถือ */
+    #chatSide { order: 1; min-height: 0; } /* แชทอยู่บน */
+    #shop { order: 2; width: 100%; max-height: 112px; border-right: none; border-top: 3px solid #0a0713; border-bottom: none; flex-direction: row; } /* ร้านอยู่ล่าง */
+    #shop h3 { display: none; }
+    #shopGrid { flex-direction: row; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; padding: 6px 8px; gap: 10px; }
+    #floor { display: none; }
+    #messages { min-height: 0; }
+    .char img { width: 42px; height: 42px; }
+    /* panel GIF ให้ลอยเหนือ (แถบพิมพ์ + ร้าน) แทนที่จะทับ */
+    #gifPanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
+    form { padding: 10px 8px; gap: 6px; }
+    form button { padding: 10px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -63,7 +93,7 @@
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
-<header>💬 กลุ่มแชท<button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></header>
+<header>💬 กลุ่มแชท<span id="headerBtns"><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
 <div id="messages"></div>
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
@@ -235,11 +265,23 @@
   // ดึงข้อความใหม่ทุก 1.5 วิ (polling — ใช้ได้กับ tunnel ฟรีที่บัฟเฟอร์ SSE ค้าง)
   // ส่ง ?name=xxx ไปด้วย = heartbeat ยืนยันว่ายังอยู่ในห้อง (กันชื่อถูกปลดเมื่อเผลอไป tab อื่น)
   let lastCount = -1;
+  let lastNewestId = null; // id ข้อความล่าสุดที่เคยเห็น — ใช้หาว่ามีข้อความใหม่หรือไม่ (ไม่ beep ตอนโหลดรอบแรก/ตอนรูปถูกลบ)
   async function poll() {
     try {
       const q = myName ? `?name=${encodeURIComponent(myName)}` : "";
       const res = await fetch("/messages" + q);
       const { messages } = await res.json();
+      const newest = messages.length ? messages[messages.length - 1].id : null;
+      if (lastNewestId === null) {
+        // รอบแรก = โหลดประวัติเก่า ไม่ต้องมีเสียง
+        lastNewestId = newest;
+      } else if (newest !== lastNewestId && myName) {
+        // มีข้อความใหม่ — หยิบเฉพาะอันที่ยังไม่เคยเห็น (กัน beep ซ้ำตอน reconnect)
+        const seenAt = messages.findIndex((m) => m.id === lastNewestId);
+        const fresh = seenAt === -1 ? messages : messages.slice(seenAt + 1);
+        if (fresh.some((m) => m.name !== myName) && !document.hidden) playSound();
+        lastNewestId = newest;
+      }
       if (messages.length !== lastCount) {
         list.innerHTML = "";
         messages.forEach(append);
@@ -252,6 +294,44 @@
   setInterval(poll, 1500);
   // กลับมาที่แท็บปุ๊บ poll ทันที (browser throttle timer ตอนอยู่เบื้องหลัง)
   document.addEventListener("visibilitychange", () => !document.hidden && poll());
+
+  // ---- เสียงแจ้งเตือน 8-bit (Web Audio — สร้างเอง ไม่พึ่งไฟล์เสียง) ----
+  let soundCtx = null;
+  let muted = localStorage.getItem("chatsound") === "off";
+  const soundBtn = $("soundBtn");
+  const setSoundBtn = () => (soundBtn.textContent = muted ? "🔇" : "🔊");
+  soundBtn.addEventListener("click", () => {
+    muted = !muted;
+    localStorage.setItem("chatsound", muted ? "off" : "on");
+    setSoundBtn();
+    playSound(); // กดปิด = เงียบ, กดเปิด = ได้ยินตัวอย่างทันที
+  });
+  setSoundBtn();
+  // browser กัน autoplay — สร้าง AudioContext หลังมีการกด/แตะครั้งแรกเท่านั้น
+  ["pointerdown", "keydown"].forEach((ev) =>
+    document.addEventListener(ev, () => {
+      if (!soundCtx) soundCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (soundCtx.state === "suspended") soundCtx.resume();
+    }, { once: true })
+  );
+  function playSound() {
+    if (muted || !soundCtx) return;
+    try {
+      const t = soundCtx.currentTime;
+      const osc = soundCtx.createOscillator();
+      const gain = soundCtx.createGain();
+      osc.type = "square"; // เสียง 8-bit
+      osc.frequency.setValueAtTime(880, t);
+      osc.frequency.setValueAtTime(1318, t + 0.1); // ขึ้น 2 โน้ต (ดิง-ดอง)
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+      osc.connect(gain);
+      gain.connect(soundCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    } catch { /* เสียงพังไม่เป็นไร */ }
+  }
 
   // ---- ร้านตัวละคร: โชว์คนที่อยู่ในห้องเป็น pixel art (poll ทุก 2 วิ) ----
   const shopGrid = $("shopGrid");

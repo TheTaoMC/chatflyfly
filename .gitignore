@@ -14,6 +14,9 @@ flyctl.zip
 .sse_live.txt
 .test-*.json
 
+# log จากการรัน background
+*.log
+
 # ไฟล์ส่วนตัว/เครื่องมือ
 knowledge.md
 .freebuff/
