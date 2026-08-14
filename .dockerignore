@@ -1,0 +1,12 @@
+.git
+.freebuff
+knowledge.md
+uploads
+cloudflared.exe
+.sse_live.txt
+.test-*.json
+node_modules
+Dockerfile
+.dockerignore
+fly.toml
+.gitignore

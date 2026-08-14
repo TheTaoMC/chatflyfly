@@ -4,8 +4,11 @@ node_modules/
 # รูปชั่วคราว — ล้างทุก restart
 uploads/
 
-# tunnel binary (โหลดใหม่ได้จาก cloudflared.com)
+# tunnel / deploy binaries (โหลดใหม่ได้จากเว็บผู้ผลิต)
 cloudflared.exe
+flyctl.exe
+wintun.dll
+flyctl.zip
 
 # ไฟล์ทดสอบชั่วคราว
 .sse_live.txt

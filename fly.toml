@@ -1,0 +1,21 @@
+# Fly.io config — ดูเพิ่ม: https://fly.io/docs/reference/configuration/
+# ถ้าชื่อ app ซ้ำบน Fly ให้เปลี่ยนตรง app = "..." เป็นชื่ออื่น (ต้องไม่ซ้ำใคร)
+
+app = "chatflyfly"
+
+primary_region = "sin" # Singapore — ใกล้ไทยสุด หน่วงต่ำ
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+
+# http_service = เปิด https ให้อัตโนมัติ (แรงๆ เข้ามาจะโดน redirect)
+# auto_stop = หลับเมื่อไม่มีคนใช้ (ฟรี tier) — ตื่นเองเมื่อมี request เข้า
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
