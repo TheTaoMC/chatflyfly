@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," /> <!-- ไม่ให้ browser ขอ favicon แล้วเจอ 404 -->
+<title>กลุ่มแชท</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: row; }
+  #chatSide { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* ---- ร้านตัวละคร (ฝั่งซ้าย) ---- */
+  #shop { width: 200px; background: #2e1f2e; border-right: 4px solid #141414; display: flex; flex-direction: column; overflow: hidden; }
+  #shop h3 { margin: 0; padding: 10px 8px; color: #ffd54f; font-size: 13px; letter-spacing: 1px; background: #1f1420; border-bottom: 2px solid #141414; font-family: monospace; }
+  #shopGrid { flex: 1; overflow-y: auto; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 10px; }
+  .char { text-align: center; }
+  .char img { width: 48px; height: 48px; image-rendering: pixelated; display: block; margin: 0 auto; }
+  .char.me img { outline: 2px solid #ffd54f; }
+  .char-name { color: #eee; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char.me .char-name { color: #ffd54f; font-weight: 700; }
+  #shopGrid .empty { color: #888; font-size: 12px; text-align: center; padding: 20px 0; font-family: monospace; }
+  #floor { height: 26px; background: repeating-linear-gradient(90deg, #6b4a2f 0 24px, #5a3d26 24px 48px); border-top: 2px solid #141414; }
+  @media (max-width: 640px) {
+    body { flex-direction: column; }
+    #shop { width: 100%; max-height: 118px; border-right: none; border-bottom: 4px solid #141414; flex-direction: row; }
+    #shop h3 { display: none; }
+    #shopGrid { flex-direction: row; overflow-x: auto; padding: 6px 8px; gap: 8px; }
+    #floor { display: none; }
+  }
+  header { background: #075e54; color: #fff; padding: 12px 16px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+  #nameBtn { background: rgba(255,255,255,.15); padding: 6px 14px; font-size: 14px; font-weight: 600; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 70%; padding: 8px 12px; border-radius: 12px; background: #fff; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .msg.me { background: #dcf8c6; align-self: flex-end; }
+  .msg .name { font-size: 12px; font-weight: 700; color: #128c7e; }
+  .msg .time { font-size: 11px; color: #999; float: right; margin-left: 8px; margin-top: 4px; }
+  form { display: flex; gap: 8px; padding: 12px; background: #fff; border-top: 1px solid #ddd; }
+  input[type="text"] { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 20px; font-size: 15px; }
+  button { padding: 10px 20px; border: none; border-radius: 20px; background: #075e54; color: #fff; font-size: 15px; cursor: pointer; }
+  .msg img { max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 6px; cursor: pointer; }
+  #gifPanel { position: fixed; bottom: 70px; left: 12px; right: 12px; max-width: 520px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.25); display: none; overflow: hidden; z-index: 9; }
+  #gifSearch { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #eee; font-size: 14px; outline: none; }
+  #gifGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; max-height: 260px; overflow-y: auto; }
+  #gifGrid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; border-radius: 6px; }
+  #gifGrid .empty { grid-column: 1/-1; text-align: center; color: #999; padding: 20px; font-size: 13px; }
+  #toast { position: fixed; top: 16px; right: 16px; background: #333; color: #fff; padding: 10px 14px; border-radius: 8px; display: none; }
+  #nameModal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal { position: relative; background: #fff; padding: 24px; border-radius: 12px; width: 300px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+  #modalClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #888; font-size: 16px; padding: 4px 10px; border-radius: 8px; }
+  .modal h3 { margin: 0 0 12px; }
+  .modal input { width: 100%; }
+  .modal button { margin-top: 10px; width: 100%; }
+  #modalErr { color: #d32f2f; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  #emojiRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin: 10px 0 2px; }
+  #emojiRow button { width: auto; margin: 0; background: none; font-size: 20px; padding: 2px 4px; border-radius: 6px; }
+  #emojiRow button.sel { background: #dcf8c6; outline: 2px solid #075e54; }
+</style>
+</head>
+<body>
+<aside id="shop">
+  <h3>🛍️ ร้านตัวละคร</h3>
+  <div id="shopGrid"><div class="empty">กำลังโหลด...</div></div>
+  <div id="floor"></div>
+</aside>
+<div id="chatSide">
+<header>💬 กลุ่มแชท<button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></header>
+<div id="messages"></div>
+<form id="form">
+  <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
+  <label id="imgBtn" title="ส่งรูป">📷<input id="file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden /></label>
+  <button type="button" id="gifBtn" title="ค้นหา GIF จาก Giphy">GIF</button>
+  <button type="submit">ส่ง</button>
+</form>
+</div>
+<div id="toast"></div>
+<div id="gifPanel">
+  <input id="gifSearch" type="text" placeholder="ค้นหา GIF... (Giphy)" autocomplete="off" />
+  <div id="gifGrid"><div class="empty">พิมพ์คำค้นเพื่อค้นหา GIF</div></div>
+</div>
+<div id="nameModal">
+  <div class="modal">
+    <button id="modalClose" title="ปิด">✕</button>
+    <h3>ตั้งชื่อก่อนเข้าแชท</h3>
+    <input id="modalName" placeholder="ชื่อเล่นของคุณ" maxlength="50" autocomplete="off" />
+    <div id="emojiRow" title="เลือกตัวละคร"></div>
+    <button id="modalGo">เข้าแชท</button>
+    <div id="modalErr"></div>
+  </div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const textInput = $("text"), list = $("messages"), form = $("form"), nameBtn = $("nameBtn");
+
+  // ชื่อของเรา (จำจากครั้งก่อนใน localStorage)
+  let myName = localStorage.getItem("chatname") || "";
+  const updateNameBtn = () => (nameBtn.textContent = myName ? `👤 ${myName}` : "👤 ตั้งชื่อ");
+
+  // ---- ตัวละคร (อีโมจิ) — สี pixel art ตามตัวที่เลือก ----
+  const EMOJI_COLORS = {
+    "🦊": "#e67e22", "🐱": "#f6a821", "🐶": "#a9714b", "🐼": "#4a4a4a", "🦁": "#e8b93c",
+    "🐸": "#5cb85c", "🐵": "#b08968", "🦄": "#b48ce0", "🐯": "#e67e22", "🐨": "#8d9ba8",
+    "🐰": "#f0b9c8", "🐷": "#f5a3c0", "🐮": "#b9b9b9", "🐹": "#d9a05b", "🐧": "#5b7fa6",
+    "🐦": "#5aa7e8", "🐢": "#6fbf73", "🐙": "#c77bd8", "🦋": "#9d7ce0", "🐝": "#e9c93c"
+  };
+  const AVATARS = Object.keys(EMOJI_COLORS);
+  let myAvatar = localStorage.getItem("chatavatar") || "";
+  if (!EMOJI_COLORS[myAvatar]) myAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+
+  // ปุ่มเลือกตัวละครใน modal
+  const emojiRow = $("emojiRow");
+  AVATARS.forEach((e) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = e;
+    if (e === myAvatar) b.classList.add("sel");
+    b.addEventListener("click", () => {
+      emojiRow.querySelectorAll("button").forEach((x) => x.classList.remove("sel"));
+      b.classList.add("sel");
+      myAvatar = e;
+    });
+    emojiRow.appendChild(b);
+  });
+
+  // ---- pixel art sprite 8x8 (วาดเองด้วย canvas ไม่พึ่ง dependency) ----
+  const SPRITE = [
+    "..HHHH..",
+    ".HHHHHH.",
+    "...FF...",
+    "..FEF...",
+    ".CCCCCC.",
+    ".CCCCCC.",
+    ".CC..CC.",
+    ".LL..LL.",
+  ];
+  const shade = (hex, f) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${Math.round(((n >> 16) & 255) * f)},${Math.round(((n >> 8) & 255) * f)},${Math.round((n & 255) * f)})`;
+  };
+  function pixelSprite(avatar) {
+    const primary = EMOJI_COLORS[avatar] || "#607d8b";
+    const colors = { H: shade(primary, 0.7), F: "#f2c9a0", E: "#3a2a20", C: primary, L: "#4a4a4a" };
+    const cv = document.createElement("canvas");
+    cv.width = 8; cv.height = 8;
+    const ctx = cv.getContext("2d");
+    SPRITE.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch !== ".") { ctx.fillStyle = colors[ch]; ctx.fillRect(x, y, 1, 1); }
+    }));
+    const out = document.createElement("canvas");
+    out.width = 48; out.height = 48;
+    const o = out.getContext("2d");
+    o.imageSmoothingEnabled = false;
+    o.drawImage(cv, 0, 0, 48, 48);
+    return out.toDataURL();
+  }
+
+  // ---- จองชื่อ (กันชื่อซ้ำ): modal จะขึ้นเมื่อยังไม่มีชื่อ หรือชื่อถูกคนอื่นใช้อยู่ ----
+  const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose");
+  const showModal = (err) => {
+    modalErr.textContent = err || "";
+    // ยังไม่มีชื่อ (เข้ารอบแรก) = ปิดไม่ได้ ต้องตั้งชื่อก่อน
+    modalClose.style.display = myName ? "block" : "none";
+    modal.style.display = "flex";
+    modalName.focus();
+  };
+  const closeModal = () => {
+    if (!myName) return; // รอบแรกห้ามปิด
+    modal.style.display = "none";
+  };
+  // ปิดด้วยปุ่ม ✕ / คลิกพื้นหลัง / กด ESC (เฉพาะตอนเปลี่ยนชื่อ)
+  modalClose.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => e.target === modal && closeModal());
+  document.addEventListener("keydown", (e) => e.key === "Escape" && closeModal());
+  async function claimName(n) {
+    const res = await fetch("/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: n, avatar: myAvatar }),
+    });
+    if (!res.ok) return (await res.json()).error || "ชื่อนี้ใช้ไม่ได้";
+    return null; // สำเร็จ
+  }
+  const enter = async () => {
+    const n = modalName.value.trim();
+    if (!n) return;
+    const err = await claimName(n);
+    if (err) return (modalErr.textContent = err);
+    myName = n;
+    localStorage.setItem("chatname", n);
+    localStorage.setItem("chatavatar", myAvatar);
+    updateNameBtn();
+    closeModal();
+    textInput.focus();
+  };
+  modalGo.addEventListener("click", enter);
+  modalName.addEventListener("keydown", (e) => e.key === "Enter" && enter());
+  // กดปุ่มชื่อ = เปิด modal เปลี่ยนชื่อ (มีชื่อเดิมให้แก้)
+  nameBtn.addEventListener("click", () => {
+    modalName.value = myName;
+    showModal("");
+  });
+  updateNameBtn();
+  if (myName) {
+    // มีชื่อเก่าอยู่แล้ว → ลองจองใหม่ ถ้าซ้ำค่อยขึ้น modal ให้เปลี่ยนชื่อ
+    claimName(myName).then((err) => err && showModal(err));
+  } else {
+    showModal("");
+  }
+
+  const fmt = (t) => new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function append(msg) {
+    const div = document.createElement("div");
+    div.className = "msg" + (msg.name === myName ? " me" : "");
+    // esc() ป้องกัน XSS — อย่าเปลี่ยนเป็น innerHTML กับค่าที่ไม่ได้ esc
+    let html = `<span class="name">${esc(msg.name)}</span>`;
+    if (msg.img) {
+      // คลิกรูป = เปิดดูเต็มจอใน tab ใหม่
+      html += `<a href="${esc(msg.img)}" target="_blank"><img src="${esc(msg.img)}" alt="รูป"></a>`;
+    }
+    if (msg.text) html += ` ${esc(msg.text)}`;
+    html += `<span class="time">${fmt(msg.time)}</span>`;
+    div.innerHTML = html;
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.style.display = "block";
+    setTimeout(() => (t.style.display = "none"), 3000);
+  }
+
+  // ดึงข้อความใหม่ทุก 1.5 วิ (polling — ใช้ได้กับ tunnel ฟรีที่บัฟเฟอร์ SSE ค้าง)
+  // ส่ง ?name=xxx ไปด้วย = heartbeat ยืนยันว่ายังอยู่ในห้อง (กันชื่อถูกปลดเมื่อเผลอไป tab อื่น)
+  let lastCount = -1;
+  async function poll() {
+    try {
+      const q = myName ? `?name=${encodeURIComponent(myName)}` : "";
+      const res = await fetch("/messages" + q);
+      const { messages } = await res.json();
+      if (messages.length !== lastCount) {
+        list.innerHTML = "";
+        messages.forEach(append);
+        lastCount = messages.length;
+        list.scrollTop = list.scrollHeight;
+      }
+    } catch { /* ครั้งหน้าลองใหม่ */ }
+  }
+  poll();
+  setInterval(poll, 1500);
+  // กลับมาที่แท็บปุ๊บ poll ทันที (browser throttle timer ตอนอยู่เบื้องหลัง)
+  document.addEventListener("visibilitychange", () => !document.hidden && poll());
+
+  // ---- ร้านตัวละคร: โชว์คนที่อยู่ในห้องเป็น pixel art (poll ทุก 2 วิ) ----
+  const shopGrid = $("shopGrid");
+  async function pollUsers() {
+    try {
+      const r = await fetch("/users");
+      const { users } = await r.json();
+      shopGrid.innerHTML = users.map((u) => {
+        const mine = u.name === myName ? " me" : "";
+        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="char-name">${esc(u.name)}</div></div>`;
+      }).join("") || '<div class="empty">ยังไม่มีใครในร้าน</div>';
+    } catch { /* ข้ามรอบ */ }
+  }
+  pollUsers();
+  setInterval(pollUsers, 2000);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = myName, text = textInput.value.trim();
+    if (!name) return toast("ใส่ชื่อก่อนส่ง");
+    if (!text) return;
+    const res = await fetch("/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, text }),
+    });
+    if (!res.ok) return toast((await res.json()).error || "ส่งไม่สำเร็จ");
+    textInput.value = "";
+    textInput.focus();
+  });
+
+  // ---- Giphy GIF picker (ต้องใส่ API key ฟรีจาก developers.giphy.com) ----
+  const GIPHY_KEY = "JWeANAddZr1NxIauJB7YuZ66TCyYeF6w";
+  const gifPanel = $("gifPanel"), gifSearch = $("gifSearch"), gifGrid = $("gifGrid");
+  $("gifBtn").addEventListener("click", () => {
+    const show = gifPanel.style.display !== "block";
+    gifPanel.style.display = show ? "block" : "none";
+    if (show) gifSearch.focus();
+  });
+  let gifTimer;
+  gifSearch.addEventListener("input", () => {
+    clearTimeout(gifTimer);
+    gifTimer = setTimeout(searchGiphy, 400);
+  });
+
+  async function searchGiphy() {
+    const q = gifSearch.value.trim();
+    if (!q) return;
+    if (GIPHY_KEY === "PASTE_YOUR_GIPHY_KEY_HERE") {
+      gifGrid.innerHTML = '<div class="empty">ยังไม่ได้ใส่ Giphy API key — ดูวิธีในหน้าสนทนา</div>';
+      return;
+    }
+    gifGrid.innerHTML = '<div class="empty">กำลังค้นหา...</div>';
+    try {
+      const r = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(q)}&limit=24&rating=g`);
+      const { data } = await r.json();
+      if (!data.length) {
+        gifGrid.innerHTML = '<div class="empty">ไม่เจอ GIF</div>';
+        return;
+      }
+      gifGrid.innerHTML = "";
+      data.forEach((g) => {
+        const img = document.createElement("img");
+        img.src = g.images.fixed_width.url;
+        img.alt = g.title || "gif";
+        img.addEventListener("click", () => sendGif(g.images.fixed_width.url)); // fixed_width เล็กพอ ไม่เกินลิมิต 5MB
+        gifGrid.appendChild(img);
+      });
+    } catch {
+      gifGrid.innerHTML = '<div class="empty">ค้นหาไม่สำเร็จ</div>';
+    }
+  }
+
+  async function sendGif(url) {
+    const name = myName;
+    if (!name) return toast("ใส่ชื่อก่อนส่ง GIF");
+    gifPanel.style.display = "none";
+    try {
+      // ดาวน์โหลด GIF จาก Giphy (CORS) แล้วส่งผ่าน /upload path เดิม → TTL 5 นาทีเหมือนรูป
+      const blob = await (await fetch(url)).blob();
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1]);
+        r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+      const res = await fetch("/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ext: "gif", img: base64 }),
+      });
+      if (!res.ok) return toast((await res.json()).error || "ส่ง GIF ไม่สำเร็จ");
+      toast("ส่ง GIF แล้ว");
+    } catch {
+      toast("ดาวน์โหลด GIF ไม่ได้");
+    }
+  }
+  // ปิด panel เมื่อคลิกข้างนอกหรือกด ESC
+  document.addEventListener("click", (e) => {
+    if (!gifPanel.contains(e.target) && e.target.id !== "gifBtn") gifPanel.style.display = "none";
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") gifPanel.style.display = "none"; });
+
+  // ส่งรูป: อ่านเป็น base64 แล้ว POST /upload (รูปจะถูกลบอัตโนมัติหลัง 5 นาที)
+  $("file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ""; // ให้เลือกไฟล์เดิมซ้ำได้
+    if (!file) return;
+    const name = myName;
+    if (!name) return toast("ใส่ชื่อก่อนส่งรูป");
+    if (file.size > 5 * 1024 * 1024) return toast("รูปใหญ่เกิน 5MB");
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (!["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return toast("รองรับเฉพาะ jpg/png/gif/webp");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      // ตัด prefix "data:image/...;base64," ออก
+      const base64 = String(reader.result).split(",")[1];
+      const res = await fetch("/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ext, img: base64 }),
+      });
+      if (!res.ok) return toast((await res.json()).error || "ส่งรูปไม่สำเร็จ");
+      toast("ส่งรูปแล้ว (จะถูกลบหลัง 5 นาที)");
+    };
+    reader.onerror = () => toast("อ่านไฟล์ไม่สำเร็จ");
+    reader.readAsDataURL(file);
+  });
+</script>
+</body>
+</html>

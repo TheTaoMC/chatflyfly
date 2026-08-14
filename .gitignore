@@ -1,0 +1,16 @@
+# ไฟล์ที่ไม่ควรขึ้น GitHub
+node_modules/
+
+# รูปชั่วคราว — ล้างทุก restart
+uploads/
+
+# tunnel binary (โหลดใหม่ได้จาก cloudflared.com)
+cloudflared.exe
+
+# ไฟล์ทดสอบชั่วคราว
+.sse_live.txt
+.test-*.json
+
+# ไฟล์ส่วนตัว/เครื่องมือ
+knowledge.md
+.freebuff/
