@@ -11,7 +11,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000; // Render/Fly ส่ง PORT env มาให้ — ใช้ของเดิมถ้าไม่ตั้ง
 const MAX_MESSAGES = 200; // เก็บแค่ 200 ข้อความล่าสุดใน memory
 const MAX_TEXT = 2000; // จำกัดความยาวข้อความ
 const MAX_IMG_BYTES = 5 * 1024 * 1024; // รูปไม่เกิน 5MB
