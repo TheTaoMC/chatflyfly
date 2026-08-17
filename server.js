@@ -25,10 +25,29 @@ try {
 } catch { /* ไฟล์ไม่ valid ก็ข้ามไป */ }
 
 const PORT = Number(process.env.PORT) || 3000; // Render/Fly ส่ง PORT env มาให้ — ใช้ของเดิมถ้าไม่ตั้ง
+// วันไทย (Asia/Bangkok) — ใช้รีเซ็ตโควต้าต่อวัน (ให้หัวใจ/คะแนน)
+const dayKey = (ms = Date.now()) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); // YYYY-MM-DD
 const MAX_MESSAGES = 200; // เก็บแค่ 200 ข้อความล่าสุดใน memory
 const MAX_TEXT = 2000; // จำกัดความยาวข้อความ
 const MAX_IMG_BYTES = 5 * 1024 * 1024; // รูปไม่เกิน 5MB
 const IMAGE_TTL_MS = Number(process.env.IMG_TTL_MS) || 5 * 60 * 1000; // รูปหายอัตโนมัติหลัง 5 นาที (env ใช้ทดสอบ)
+
+// ---- ร้านค้าอวตาร (ซื้อชิ้นส่วนด้วยหัวใจ) ----
+// avatar = token 5 ชั้น: b(ชาม)c(ตัว)h(หัว)f(หน้า)o(หมวก) เช่น b1c1h1f1o0
+const DEFAULT_TOKEN = "b1c1h1f1o0";
+const FREE_PARTS = ["b1", "b2", "b3", "c1", "c2", "c3", "h1", "h2", "h3", "f1", "f2", "f3", "o0", "o1", "o2"]; // ชุดฟรีตอนเริ่ม
+const TYPE_IDS = { b: [1, 2, 3, 4, 5], c: [1, 2, 3, 4, 5], h: [1, 2, 3, 4, 5], f: [1, 2, 3, 4], o: [0, 1, 2, 3, 4] }; // variant เดิมของแต่ละชั้น (กัน id ชน)
+const SHOP_ITEMS = [
+  { id: "b4", name: "ชามทองคำ", price: 50, desc: "ชามหรู ระดับปรมาจารย์" },
+  { id: "b5", name: "ชามซากุระ", price: 20, desc: "สีชมพูหวานกิมจิ" },
+  { id: "c4", name: "เอี๊ยมเชฟเหลือง", price: 15, desc: "ชุดทำงานเชฟตัวจริง" },
+  { id: "c5", name: "เสื้อฮาวาย", price: 25, desc: "มาพักร้อนที่ร้านกัน" },
+  { id: "h4", name: "ผมฟ้าคราม", price: 15, desc: "ย้อมฟ้า โคตรเท่" },
+  { id: "h5", name: "ผมทอง", price: 30, desc: "สว่างไสวทั้งร้าน" },
+  { id: "f4", name: "ตาปีศาจแดง", price: 25, desc: "สายมังกรเท่านั้น" },
+  { id: "o3", name: "กิมหยง", price: 10, desc: "หัวหน้าวัยรุ่น" },
+  { id: "o4", name: "หมวกเชฟทอง", price: 60, desc: "สุดยอดตำนานราเมง" },
+];
 
 // ---- Google login (บังคับ) ----
 // ต้องสร้าง OAuth Client ID (Web application) ที่ console.cloud.google.com แล้วใส่ env:
@@ -42,6 +61,13 @@ const IDENTITIES_FILE = process.env.IDENTITIES_FILE || path.join(__dirname, "ide
 const BANNED_FILE = process.env.BANNED_FILE || path.join(__dirname, "banned.json"); // blocklist (sub ของ Google)
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
+// ชิ้นส่วนอวตารที่วาดเอง (สตูดิโอ) — เก็บใน parts.json (committable → อยู่ข้าม deploy)
+const PARTS_FILE = process.env.PARTS_FILE || path.join(__dirname, "parts.json");
+let customParts = []; // [{id, type, name, colorA, colorB, map[], price}]
+try {
+  customParts = JSON.parse(fs.readFileSync(PARTS_FILE, "utf8"));
+} catch { /* ยังไม่มีไฟล์ = ว่าง */ }
+const saveParts = () => fs.writeFileSync(PARTS_FILE, JSON.stringify(customParts, null, 2));
 const IMG_EXT = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
 const AUDIO_EXT = { webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg" }; // ข้อความเสียง (kind=voice)
 const ALLOWED_EXT = { ...IMG_EXT, ...AUDIO_EXT }; // ใช้ตอนเสิร์ฟ /uploads/<file>
@@ -62,6 +88,22 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
 .card span{font-size:12px;color:#b8a888}
 #latestBox{margin-bottom:20px}
 .msg2{background:#181512;border:1px solid #3a2a1a;padding:5px 10px;margin-top:4px;font-size:12px;color:#e8e6f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* สตูดิโอวาดชุด */
+.srow{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+.srow select,.srow input{flex:1;padding:6px;min-width:120px}
+#sTools{display:flex;gap:4px;margin-bottom:6px}
+#sTools button{margin:0;width:auto;padding:4px 8px;font-size:11px}
+#sTools button.on{background:#ffcc00;color:#12100e}
+#sPalette{display:flex;flex-wrap:wrap;gap:3px;margin:6px 0}
+#sPalette button{width:20px;height:20px;margin:0;padding:0;border:2px solid #3a2a1a;box-shadow:none}
+#sPalette button.onA{border-color:#ffcc00}
+#sPalette button.onB{border-color:#ff6ec7}
+.studioBody{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+#sGrid{display:grid;grid-template-columns:repeat(16,13px);gap:0;border:2px solid #5a4a3a;width:fit-content}
+#sGrid button{width:13px;height:13px;margin:0;padding:0;background:#241b14;border:1px solid #33281c;box-shadow:none}
+#sGrid button:hover{border-color:#ffcc00}
+#studioPreview img{width:112px;height:112px;image-rendering:pixelated;display:block;border:2px solid #3a2a1a}
+#sErr{color:#ff6ec7;font-size:13px;margin-top:6px;min-height:16px}
 </style></head><body>
 <h1>🍜 หลังบ้านร้านราเมง (ผู้ดูแล)</h1>
 <p>Admin token: <input id="tok" type="password" placeholder="ADMIN_TOKEN"> <button onclick="load()">โหลดข้อมูล</button></p>
@@ -73,6 +115,28 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
 <h2>คนที่ออนไลน์อยู่ (ชื่อเล่น → ตัวตนจริง)</h2><table id="t1"></table>
 <h2>ทุกคนที่เคยเข้าสู่ระบบ (เก็บหลังบ้าน)</h2><table id="t2"></table>
 <h2>Blocklist (โดนแบนแล้ว — login ไม่ได้)</h2><table id="t3"></table>
+<h2>🛠 สตูดิโอวาดชุด (วาดชิ้นส่วนอวตาร 16×16)</h2>
+<p>วาดเสร็จ → ตั้งชื่อ/ราคา → บันทึก (ใช้ ADMIN_TOKEN จากช่องบนสุด) — ตั้งราคา = ขึ้นร้านค้าให้ผู้ใช้ซื้อด้วยหัวใจ</p>
+<div class="srow">
+  <select id="sType"><option value="b">🍜 ชาม</option><option value="c">👕 ตัว</option><option value="h">🙂 หัว</option><option value="f">😊 หน้า</option><option value="o">🎩 หมวก</option></select>
+  <input id="sName" placeholder="ชื่อชิ้นส่วน" maxlength="30">
+  <input id="sPrice" type="number" min="0" max="1000" placeholder="ราคา 💗 (0=ฟรี)">
+</div>
+<div id="sTools">
+  <button type="button" id="sToolA" class="on">🎨 สี A</button>
+  <button type="button" id="sToolB">🎨 สี B</button>
+  <button type="button" id="sToolE">🧽 ลบ</button>
+  <button type="button" id="sClear">🗑 ล้าง</button>
+</div>
+<div id="sPalette"></div>
+<div class="studioBody">
+  <div id="sGrid"></div>
+  <div id="studioPreview"></div>
+</div>
+<button id="sSave">💾 บันทึกชิ้นส่วน</button>
+<div id="sErr"></div>
+<h2>🧩 ชิ้นส่วนวาดเอง (ทั้งหมด)</h2>
+<div id="partsList"></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=ms=>ms?new Date(ms).toLocaleString('th-TH'):'-';
@@ -111,12 +175,12 @@ function render(){
     const last=h[0];return '<td title="'+esc(lines.join(String.fromCharCode(10)))+'">'+esc(last.from?last.from+' → '+last.name:'ตั้งชื่อ '+last.name)+'</td>';};
   const t1=DATA.online.filter(hit).map(o=>'<tr>'+cells({name:o.name,avatar:o.avatar,realName:o.realName,email:o.email,lastSeen:fmt(o.lastSeen)},['name','avatar','realName','email','lastSeen'])
     +'<td>'+btn('ban',[o.gid,o.realName,o.email],'แบน')+'</td></tr>').join('');
-  const t2=DATA.identities.filter(hit).map(o=>'<tr>'+cells({sub:o.sub,nick:o.nickname||'—',name:o.name,email:o.email,points:o.points||0,day:o.dayPoints||0,firstSeen:fmt(o.firstSeen),lastSeen:fmt(o.lastSeen)},['sub','nick','name','email','points','day','firstSeen','lastSeen'])
+  const t2=DATA.identities.filter(hit).map(o=>'<tr>'+cells({sub:o.sub,nick:o.nickname||'—',name:o.name,email:o.email,points:o.points||0,hearts:o.hearts||0,day:o.dayPoints||0,firstSeen:fmt(o.firstSeen),lastSeen:fmt(o.lastSeen)},['sub','nick','name','email','points','hearts','day','firstSeen','lastSeen'])
     +hist(o)+'<td>'+btn('ban',[o.sub,o.name,o.email],'แบน')+'</td></tr>').join('');
   const t3=DATA.banned.filter(hit).map(o=>'<tr>'+cells({sub:o.sub,nick:o.nickname||'—',name:o.name,email:o.email,reason:o.reason,bannedAt:fmt(o.bannedAt)},['sub','nick','name','email','reason','bannedAt'])
     +'<td>'+btn('unban',[o.sub],'ปลดแบน')+'</td></tr>').join('');
   document.getElementById('t1').innerHTML='<tr><th>ชื่อเล่น</th><th>อวตาร</th><th>ชื่อจริง</th><th>อีเมล</th><th>ออนไลน์ล่าสุด</th><th></th></tr>'+t1;
-  document.getElementById('t2').innerHTML='<tr><th>sub</th><th>ชื่อเล่น</th><th>ชื่อจริง</th><th>อีเมล</th><th>แต้ม</th><th>วันนี้</th><th>เข้าแรก</th><th>ล่าสุด</th><th>เปลี่ยนชื่อ</th><th></th></tr>'+t2;
+  document.getElementById('t2').innerHTML='<tr><th>sub</th><th>ชื่อเล่น</th><th>ชื่อจริง</th><th>อีเมล</th><th>แต้ม</th><th>หัวใจ</th><th>วันนี้</th><th>เข้าแรก</th><th>ล่าสุด</th><th>เปลี่ยนชื่อ</th><th></th></tr>'+t2;
   document.getElementById('t3').innerHTML='<tr><th>sub</th><th>ชื่อเล่น</th><th>ชื่อจริง</th><th>อีเมล</th><th>เหตุผล</th><th>แบนเมื่อ</th><th></th></tr>'+t3;
 }
 async function call(path,body){
@@ -127,6 +191,84 @@ async function call(path,body){
 }
 async function ban(sub,name,email){await call('/admin/ban',{sub,reason:reason()});}
 async function unban(sub){await call('/admin/unban',{sub});}
+// ── สตูดิโอวาดชุด (พรีวิว sprite + วาด 16×16) ──
+const shade=(hex,f)=>{const n=parseInt(hex.slice(1),16);return 'rgb('+Math.round(((n>>16)&255)*f)+','+Math.round(((n>>8)&255)*f)+','+Math.round((n&255)*f)+')'};
+const SMAPS={
+  head:[".....HHHHHH.....","...HHHHHHHHHH...","..HHHHHHHHHHHH..","..HHHHHHHHHHHH..","..HHFFFFFFFFHH..",".HHFFFFFFFFFFHH.",".HHFFFFFFFFFFHH.","...FFFFFFFFFF..."],
+  face:[".....E....E.....",".......M........"],
+  body:["....CCCCCCCC....","...CCCCCCCCCC...","...CCCCCCCCCC...","...CCCCCCCCCC...","....CCCCCCCC...."],
+  bowl:["....BBBBBBBB....","..BBBBBBBBBBBB..","..BBBBBBBBBBBB.."],
+  chef:[".....OOOOOO.....","....OOOOOOOO....","....OOOOOOOO....","....OOOOOOOO...."],
+};
+const SCOLS={b:'#5b7fa6',c:'#e8e6f0',h:'#3a2a20',f:'#3a2a20',o:'#ffffff'};
+function renderPreview(map,a,b,type){
+  const cv=document.createElement('canvas');cv.width=16;cv.height=16;
+  const ctx=cv.getContext('2d');
+  const d=(m,cols,off)=>m.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch!=='.'){ctx.fillStyle=cols[ch]||'#fff';ctx.fillRect(x,off+y,1,1);}}));
+  if(type==='b')d(map,{A:a,B:b},13);else d(SMAPS.bowl,{B:shade(SCOLS.b,0.95),D:shade(SCOLS.b,0.6)},13);
+  if(type==='h')d(map,{A:a,B:b},0);else d(SMAPS.head,{H:shade(SCOLS.h,0.65),F:'#f2c9a0'},0);
+  if(type==='c')d(map,{A:a,B:b},8);else d(SMAPS.body,{C:SCOLS.c},8);
+  if(type==='f')d(map,{A:a,B:b},6);else d(SMAPS.face,{E:SCOLS.f,M:'#7a4a30'},6);
+  if(type==='o')d(map,{A:a,B:b},0);else d(SMAPS.chef,{O:SCOLS.o},0);
+  const out=document.createElement('canvas');out.width=112;out.height=112;
+  const o=out.getContext('2d');o.imageSmoothingEnabled=false;o.drawImage(cv,0,0,112,112);
+  return out.toDataURL();
+}
+const SPALETTE=['#3a2a20','#e67e22','#e9c93c','#5aa7e8','#b48ce0','#5cb85c','#d94f4f','#f5a3c0','#ffffff','#4a4a4a','#f2c9a0','#a9714b','#7a4a30','#e74c3c'];
+let sCells=[],sTool='A',sColorA='#3a2a20',sColorB='#f2c9a0';
+function sSetTool(t){sTool=t;renderStudio();}
+function sPickColor(c){if(sTool==='A')sColorA=c;else if(sTool==='B')sColorB=c;renderStudio();}
+function sPaint(x,y){sCells[y][x]=sTool==='E'?'.':sTool;renderStudio();}
+function renderStudio(){
+  document.getElementById('sToolA').className=sTool==='A'?'on':'';
+  document.getElementById('sToolB').className=sTool==='B'?'on':'';
+  document.getElementById('sToolE').className=sTool==='E'?'on':'';
+  const pal=document.getElementById('sPalette');pal.innerHTML='';
+  SPALETTE.forEach(c=>{const b=document.createElement('button');b.type='button';b.className=(c===(sTool==='B'?sColorB:sColorA))?(sTool==='B'?'onB':'onA'):'';b.style.background=c;b.addEventListener('click',()=>sPickColor(c));pal.appendChild(b);});
+  document.getElementById('sGrid').innerHTML=sCells.flatMap((row,y)=>row.map((ch,x)=>'<button type="button" style="'+(ch!=='.'?'background:'+(ch==='A'?sColorA:sColorB):'')+'" onclick="sPaint('+x+','+y+')"></button>')).join('');
+  const type=document.getElementById('sType').value;
+  document.getElementById('studioPreview').innerHTML='<img src="'+renderPreview(sCells.map(r=>r.join('')),sColorA,sColorB,type)+'" alt="พรีวิว">';
+}
+async function sSave(){
+  const type=document.getElementById('sType').value,name=document.getElementById('sName').value.trim();
+  const price=Math.max(0,Math.round(Number(document.getElementById('sPrice').value)||0));
+  const err=document.getElementById('sErr');
+  if(!name)return err.textContent='ใส่ชื่อชิ้นส่วนก่อน';
+  if(!tok())return err.textContent='ต้องใส่ ADMIN_TOKEN ก่อน';
+  const r=await fetch('/parts',{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify({type,name,colorA:sColorA,colorB:sColorB,map:sCells.map(r=>r.join('')),price})});
+  const d=await r.json();
+  if(!r.ok)return err.textContent='❌ '+(d.error||'fail');
+  err.textContent='✅ บันทึกแล้ว id='+d.id+(price?' — ขึ้นร้านค้าแล้ว 🛒':' — ทุกคนใช้ฟรี');
+  sCells=Array.from({length:16},()=>Array(16).fill('.'));
+  renderStudio();
+  refreshParts();
+}
+async function refreshParts(){
+  const r=await fetch('/parts');
+  const d=await r.json();
+  const list=document.getElementById('partsList');list.innerHTML='';
+  const arr=d.parts||[];
+  if(!arr.length){list.innerHTML='<div class="msg2">ยังไม่มีชิ้นส่วนวาดเอง</div>';return}
+  arr.forEach(p=>{const div=document.createElement('div');div.className='msg2';
+    div.innerHTML=esc(p.id)+' · '+esc(p.name)+' · ชั้น '+p.type+' · '+(p.price?p.price+' 💗':'ฟรี');
+    const b=document.createElement('button');b.textContent='ลบ';b.style.marginLeft='8px';b.addEventListener('click',()=>delPart(p.id));
+    div.appendChild(b);list.appendChild(div);});
+}
+async function delPart(id){
+  const r=await fetch('/parts/delete',{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify({id})});
+  const d=await r.json();
+  if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
+  refreshParts();
+}
+document.getElementById('sType').addEventListener('change',renderStudio);
+document.getElementById('sToolA').addEventListener('click',()=>sSetTool('A'));
+document.getElementById('sToolB').addEventListener('click',()=>sSetTool('B'));
+document.getElementById('sToolE').addEventListener('click',()=>sSetTool('E'));
+document.getElementById('sClear').addEventListener('click',()=>{sCells=Array.from({length:16},()=>Array(16).fill('.'));renderStudio();});
+document.getElementById('sSave').addEventListener('click',sSave);
+sCells=Array.from({length:16},()=>Array(16).fill('.'));
+renderStudio();
+refreshParts();
 </script></body></html>`;
 
 // ---- state ----
@@ -417,7 +559,7 @@ const server = http.createServer(async (req, res) => {
       json(res, 409, { error: "ชื่อนี้เพิ่งถูกเปลี่ยนทิ้ง ยังใช้ไม่ได้ (24 ชม.)" });
       return;
     }
-    const avatar = String(data.avatar || "").trim().slice(0, 8) || "👤";
+    const avatar = String(data.avatar || "").trim().slice(0, 40) || DEFAULT_TOKEN;
     activeNames.set(name, { avatar, lastSeen: Date.now(), gid: sess.sub, email: sess.email, realName: sess.name });
     // จำชื่อเล่น/อวตารไว้กับบัญชี (sub) — login ครั้งถัดไปไม่ต้องตั้งใหม่ (เก็บหลังบ้าน identities.json)
     const idn = identities.get(sess.sub);
@@ -461,9 +603,186 @@ const server = http.createServer(async (req, res) => {
           pct: next ? Math.min(100, Math.round(((points - lv.min) / (next.min - lv.min)) * 100)) : 100,
           dayPoints: id ? id.dayPoints || 0 : 0,
           dayCap: DAILY_POINT_CAP,
+          hearts: id ? id.hearts || 0 : 0, // หัวใจที่สะสมไว้ (แลกของในอนาคต)
         };
       }),
     });
+    return;
+  }
+
+  // ชิ้นส่วนที่วาดเอง (สตูดิโอ) — client ต้องรู้ map เพื่อเรนเดอร์อวตารของทุกคน
+  if (method === "GET" && url.pathname === "/parts") {
+    json(res, 200, { parts: customParts });
+    return;
+  }
+  // วาดชิ้นส่วนใหม่ (ผู้ดูแล) — เก็บ parts.json + ถ้าตั้งราคา → ขึ้นร้านค้าด้วย
+  if (method === "POST" && url.pathname === "/parts") {
+    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
+      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
+      return;
+    }
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      json(res, 400, { error: "invalid json" });
+      return;
+    }
+    const type = String(data.type || "").trim();
+    if (!"bc hfo".includes(type) || type.length !== 1) { json(res, 400, { error: "type ต้องเป็น b/c/h/f/o" }); return; }
+    const name = String(data.name || "").trim().slice(0, 30);
+    if (!name) { json(res, 400, { error: "name required" }); return; }
+    const hex = (c) => /^#[0-9a-fA-F]{6}$/.test(c);
+    const colorA = String(data.colorA || "").trim();
+    const colorB = String(data.colorB || "").trim();
+    if (!hex(colorA) || !hex(colorB)) { json(res, 400, { error: "colorA/colorB ต้องเป็น #rrggbb" }); return; }
+    const map = Array.isArray(data.map) ? data.map : [];
+    if (map.length !== 16 || map.some((r) => typeof r !== "string" || r.length !== 16 || /[^AB.]/.test(r))) {
+      json(res, 400, { error: "map ต้องเป็น 16 แถว × 16 ช่อง (ใช้ . A B เท่านั้น)" });
+      return;
+    }
+    const price = Math.max(0, Math.min(1000, Math.round(Number(data.price) || 0)));
+    // id ถัดไปของ type นี้ (ชนกับชุดฟรี + ของเดิมไม่ได้)
+    const used = new Set((TYPE_IDS[type] || []).map((n) => type + n));
+    customParts.forEach((p) => p.type === type && used.add(p.id));
+    let n = type === "o" ? 5 : 1;
+    while (used.has(type + n)) n++;
+    const part = { id: type + n, type, name, colorA, colorB, map, price };
+    customParts.push(part);
+    saveParts();
+    json(res, 200, { ok: true, id: part.id });
+    return;
+  }
+  // ลบชิ้นส่วนวาดเอง (ผู้ดูแล) — อวตารที่ใส่ชิ้นส่วนนี้จะคืนเป็นชุดฟรีอัตโนมัติ
+  if (method === "POST" && url.pathname === "/parts/delete") {
+    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
+      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
+      return;
+    }
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      json(res, 400, { error: "invalid json" });
+      return;
+    }
+    const id = String(data.id || "").trim();
+    const before = customParts.length;
+    customParts = customParts.filter((p) => p.id !== id);
+    if (customParts.length === before) { json(res, 404, { error: "ไม่พบชิ้นส่วนนี้" }); return; }
+    saveParts();
+    json(res, 200, { ok: true });
+    return;
+  }
+  // ร้านค้าอวตาร — รายการสินค้า (ราคาเป็นหัวใจ) รวมชิ้นส่วนวาดเองที่ตั้งราคา
+  if (method === "GET" && url.pathname === "/shop") {
+    const custom = customParts.filter((p) => p.price > 0).map((p) => ({ id: p.id, name: p.name, price: p.price, desc: "ชิ้นส่วนวาดเอง (สตูดิโอ)" }));
+    json(res, 200, { items: [...SHOP_ITEMS, ...custom] });
+    return;
+  }
+  // สถานะของ session นี้ (nickname/avatar/owned/hearts) — ใช้แต่งตัว + ซื้อของ
+  if (method === "GET" && url.pathname === "/me") {
+    const s = sessions.get(String(url.searchParams.get("session") || ""));
+    if (!s) { json(res, 401, { error: "ต้องเข้าสู่ระบบ" }); return; }
+    const id = identities.get(s.sub);
+    if (!id) { json(res, 404, { error: "ไม่พบผู้ใช้" }); return; }
+    if (!id.owned) id.owned = [...FREE_PARTS];
+    json(res, 200, { nickname: id.nickname || "", avatar: id.avatar || DEFAULT_TOKEN, owned: id.owned, hearts: id.hearts || 0 });
+    return;
+  }
+  // ซื้อชิ้นส่วนอวตารด้วยหัวใจ — เพิ่มเข้าคลัง (owned) เก็บถาวรใน identities.json
+  if (method === "POST" && url.pathname === "/shop/buy") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      json(res, 400, { error: "invalid json" });
+      return;
+    }
+    const sess = sessions.get(String(data.session || ""));
+    if (!sess) { json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" }); return; }
+    if (banned.has(sess.sub)) { json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" }); return; }
+    const idn = identities.get(sess.sub);
+    if (!idn) { json(res, 401, { error: "ต้องจองชื่อก่อน" }); return; }
+    const buyId = String(data.id || "");
+    const item = SHOP_ITEMS.find((x) => x.id === buyId) || customParts.find((p) => p.price > 0 && p.id === buyId) || null;
+    if (!item) { json(res, 404, { error: "ไม่พบสินค้านี้" }); return; }
+    if (!idn.owned) idn.owned = [...FREE_PARTS];
+    if (idn.owned.includes(item.id)) { json(res, 409, { error: "มีชิ้นส่วนนี้แล้ว" }); return; }
+    const h = idn.hearts || 0;
+    if (h < item.price) { json(res, 400, { error: `หัวใจไม่พอ (ต้องการ ${item.price}, มี ${h})` }); return; }
+    idn.hearts = h - item.price;
+    idn.owned.push(item.id);
+    saveIdentities();
+    json(res, 200, { ok: true, hearts: idn.hearts, owned: idn.owned });
+    return;
+  }
+
+  // กดหัวใจให้เพื่อน — ให้ได้ 1 ครั้ง/วัน (ต่อคนที่ให้) หัวใจสะสมไว้กับบัญชีผู้รับ (แลกของในอนาคต)
+  if (method === "POST" && url.pathname === "/heart") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      json(res, 400, { error: "invalid json" });
+      return;
+    }
+    const sess = sessions.get(String(data.session || ""));
+    if (!sess) {
+      json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" });
+      return;
+    }
+    if (banned.has(sess.sub)) {
+      json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" });
+      return;
+    }
+    const name = String(data.name || "").trim().slice(0, 50);
+    if (!name) {
+      json(res, 400, { error: "name required" });
+      return;
+    }
+    const giver = identities.get(sess.sub);
+    if (!giver) {
+      json(res, 401, { error: "ต้องจองชื่อก่อน" });
+      return;
+    }
+    // หาผู้รับ — ออนไลน์ (มี gid) หรือมี identity ตามชื่อเล่น
+    const act = activeNames.get(name);
+    let recv = (act && act.gid && identities.get(act.gid)) || null;
+    if (!recv) recv = [...identities.values()].find((i) => i.nickname === name) || null;
+    if (!recv) {
+      json(res, 404, { error: "ไม่พบผู้ใช้นี้" });
+      return;
+    }
+    if (recv.sub === sess.sub) {
+      json(res, 400, { error: "ให้หัวใจตัวเองไม่ได้" });
+      return;
+    }
+    if (banned.has(recv.sub)) {
+      json(res, 400, { error: "ผู้ใช้นี้ถูกแบนแล้ว" });
+      return;
+    }
+    // วันละ 1 ครั้ง (ต่อคนที่ให้)
+    const today = dayKey();
+    if (giver.heartsGiven && giver.heartsGiven.date === today) {
+      json(res, 409, { error: "วันนี้ให้หัวใจไปแล้ว (1 ครั้ง/วัน)" });
+      return;
+    }
+    recv.hearts = (recv.hearts || 0) + 1;
+    const recent = recv.heartsRecent || [];
+    recent.unshift({ from: giver.nickname || name, at: Date.now() });
+    recv.heartsRecent = recent.slice(0, 5);
+    giver.heartsGiven = { date: today, name: recv.nickname || name };
+    saveIdentities();
+    json(res, 200, { ok: true, hearts: recv.hearts, givenToday: true });
     return;
   }
 
@@ -635,11 +954,17 @@ const server = http.createServer(async (req, res) => {
     const idx = LEVELS.indexOf(lv);
     const next = LEVELS[idx + 1] || null;
     const online = !!act; // มีชื่อในร้าน (heartbeat/จองชื่อ) = ออนไลน์
+    const sessTok = String(url.searchParams.get("session") || "");
+    const s = sessions.get(sessTok);
+    const myId = s ? identities.get(s.sub) : null;
+    const givenToday = !!(myId && myId.heartsGiven && myId.heartsGiven.date === dayKey()); // คนที่เปิดดูให้หัวใจวันนี้ไปแล้วหรือยัง
     json(res, 200, {
       name, // ชื่อเล่น
       avatar: pub.avatar || "👤",
       online,
       level: lv.title, icon: lv.icon, points,
+      hearts: pub.hearts || 0,
+      givenToday,
       nextTitle: next ? next.title : "", nextIcon: next ? next.icon : "",
       toNext: next ? Math.max(0, next.min - points) : 0,
       pct: next ? Math.min(100, Math.round(((points - lv.min) / (next.min - lv.min)) * 100)) : 100,

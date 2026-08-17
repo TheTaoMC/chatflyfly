@@ -32,7 +32,7 @@
   #shop h3 { margin: 0; padding: 10px 8px; color: #ffe9c4; font-size: 13px; letter-spacing: 2px; background: repeating-linear-gradient(90deg, #c8341f 0 12px, #a92a12 12px 18px, #d63a1c 18px 30px, #b52e16 30px 36px); border-bottom: 3px solid #0a0713; text-shadow: 2px 2px 0 #57130a; }
   #shopGrid { flex: 1; overflow-y: auto; padding: 12px 8px 0; display: flex; flex-direction: column; gap: 8px; }
   .char { text-align: center; }
-  .char img { width: 48px; height: 48px; image-rendering: pixelated; display: block; margin: 0 auto; }
+  .char img { width: 96px; height: 96px; image-rendering: pixelated; display: block; margin: 0 auto; }
   .char.me img { outline: 3px solid #ffcc00; box-shadow: 0 0 0 3px #000; }
   .char-name { color: #e8c9a0; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .char.me .char-name { color: #ffcc00; font-weight: 700; }
@@ -42,9 +42,9 @@
   .char-prog { height: 4px; background: #241b14; border: 1px solid #0a0713; margin-top: 3px; }
   .char-prog i { display: block; height: 100%; background: linear-gradient(90deg, #ffcc00, #ff9d5c); }
   /* ชามราเมงหน้าเคาน์เตอร์ — ตัวละครนั่งอยู่หลังชาม (bowl ทับขาสไปรต์) + ไอน้ำลอยขึ้น */
-  .char .bowl { position: relative; z-index: 1; width: 32px; height: 14px; margin: -9px auto 0; background: linear-gradient(180deg, #f0dfb8, #d9c08f); border: 2px solid #8a5a28; border-radius: 4px 4px 10px 10px; box-shadow: 0 2px 0 #3a1c0a; }
+  .char .bowl { position: relative; z-index: 1; width: 60px; height: 26px; margin: -16px auto 0; background: linear-gradient(180deg, var(--bc, #f0dfb8), var(--bd, #d9c08f)); border: 2px solid #8a5a28; border-radius: 6px 6px 14px 14px; box-shadow: 0 3px 0 #3a1c0a; }
   .char .bowl::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 50% 30%, #e89a38, #b96a16 80%); }
-  .char .bowl .st { position: absolute; bottom: 70%; left: 28%; width: 4px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.5); filter: blur(1px); animation: steam 1.7s ease-out infinite; }
+  .char .bowl .st { position: absolute; bottom: 70%; left: 28%; width: 7px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.5); filter: blur(1px); animation: steam 1.7s ease-out infinite; }
   .char .bowl .st.s2 { left: 62%; animation-delay: .6s; }
   @keyframes steam { 0% { transform: translate(0,0) scaleY(.6); opacity: 0; } 30% { opacity: .85; } 100% { transform: translate(3px,-16px) scaleY(1.5); opacity: 0; } }
   #shopGrid .empty { color: #b08a5c; font-size: 12px; text-align: center; padding: 20px 0; }
@@ -98,15 +98,34 @@
   .modal.prof { width: 280px; }
   #profClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
   #profClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
-  #profAvatar { width: 72px; height: 72px; image-rendering: pixelated; margin: 0 auto 6px; display: block; }
+  #profAvatar { width: 96px; height: 96px; image-rendering: pixelated; margin: 0 auto 6px; display: block; }
   #profName { color: #ffcc00; font-weight: 700; font-size: 16px; }
   #profStatus { font-size: 12px; margin-top: 2px; }
   #profLevel { color: #ffb35c; font-size: 13px; margin-top: 8px; }
+  #profHearts { color: #ff6ec7; font-size: 13px; margin-top: 6px; }
+  #profHeart { background: #3a1224; color: #ff8fd6; }
+  #profHeart:disabled { opacity: .55; cursor: default; }
   #profMeta { color: #8a84a8; font-size: 11px; margin-top: 6px; }
   #profErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; }
-  #emojiRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin: 10px 0 2px; }
-  #emojiRow button { width: auto; margin: 0; background: none; border: 2px solid transparent; font-size: 20px; padding: 2px 4px; box-shadow: none; text-shadow: none; }
-  #emojiRow button:hover { background: none; transform: none; box-shadow: none; }
+  #modalAvatarRow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
+  #modalAvatar { width: 72px; height: 72px; image-rendering: pixelated; }
+  #modalDress { margin: 0; width: auto; }
+  .modal.dress { width: 300px; }
+  #dressPreview { width: 128px; height: 128px; image-rendering: pixelated; display: block; margin: 0 auto 4px; }
+  #dressHearts { color: #ff6ec7; font-size: 13px; margin: 4px 0 8px; }
+  #dressTabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  #dressTabs button { margin: 0; width: auto; padding: 5px 9px; font-size: 12px; }
+  #dressTabs button.on { background: #ffcc00; color: #12100e; }
+  #dressGrid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-height: 220px; overflow-y: auto; }
+  .dvar { display: flex; flex-direction: column; align-items: center; border: 2px solid #3a2a1a; background: #181512; padding: 4px; width: 66px; cursor: pointer; }
+  .dvar img { width: 64px; height: 64px; image-rendering: pixelated; }
+  .dvar span { font-size: 10px; color: #b8a888; text-align: center; }
+  .dvar b { font-size: 11px; }
+  .dvar i { font-size: 10px; color: #7ee08a; font-style: normal; }
+  .dvar.on { border-color: #ffcc00; }
+  .dvar.locked { opacity: .4; cursor: not-allowed; }
+  .dvar button { margin: 4px 0 0; width: 100%; padding: 3px; font-size: 11px; }
+  #dressErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; min-height: 16px; }
   #emojiRow button.sel { background: #ffcc00; border-color: #000; }
   /* scrollbar พิกเซล */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -124,7 +143,7 @@
     #shopGrid { flex-direction: row; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; padding: 6px 8px; gap: 10px; }
     #floor { display: none; }
     #messages { min-height: 0; }
-    .char img { width: 42px; height: 42px; }
+    .char img { width: 72px; height: 72px; }
     /* panel GIF/เสียง ให้ลอยเหนือ (แถบพิมพ์ + ร้าน) แทนที่จะทับ */
     #gifPanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
     #voicePanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
@@ -172,7 +191,10 @@
     <div id="gsiBox"></div>
     <div id="gsiStatus"></div>
     <input id="modalName" placeholder="ชื่อเล่นของคุณ (ไม่ใช่ชื่อจริง)" maxlength="50" autocomplete="off" />
-    <div id="emojiRow" title="เลือกตัวละคร"></div>
+    <div id="modalAvatarRow" style="display:none">
+      <img id="modalAvatar" alt="avatar" />
+      <button type="button" id="modalDress">🎨 แต่งตัว</button>
+    </div>
     <button id="modalGo">เข้าแชท</button>
     <button id="logoutBtn" style="display:none">ออกจากระบบ</button>
     <div id="modalErr"></div>
@@ -185,9 +207,23 @@
     <div id="profName"></div>
     <div id="profStatus"></div>
     <div id="profLevel"></div>
+    <div id="profHearts"></div>
+    <button id="profHeart" style="display:none">💗 ให้หัวใจ</button>
     <div id="profMeta"></div>
     <button id="profEdit" style="display:none">เปลี่ยนชื่อ/อวตาร</button>
     <div id="profErr"></div>
+  </div>
+</div>
+<div id="dressModal">
+  <div class="modal dress">
+    <button id="dressClose" title="ปิด">✕</button>
+    <h3>🎨 แต่งตัว + ร้านค้า</h3>
+    <img id="dressPreview" alt="ชุด" />
+    <div id="dressHearts">💗 หัวใจ 0</div>
+    <div id="dressTabs"></div>
+    <div id="dressGrid"></div>
+    <button id="dressSave">💾 บันทึกชุด</button>
+    <div id="dressErr"></div>
   </div>
 </div>
 <script>
@@ -202,66 +238,119 @@
   const GOOGLE_CLIENT_ID = "__GOOGLE_CLIENT_ID__";
   const updateNameBtn = () => (nameBtn.textContent = myName ? `👤 ${myName}` : "👤 ตั้งชื่อ");
 
-  // ---- ตัวละคร (อีโมจิ) — สี pixel art ตามตัวที่เลือก ----
+  // ---- ระบบแต่งตัว: อวตาร = ชิ้นส่วน 5 ชั้น (ชาม/ตัว/หัว/หน้า/หมวก) ----
+  // อีโมจิเก่า (legacy) ยังเรนเดอร์ได้ แต่พอแต่งตัวแล้วจะกลายเป็น token
+  const TOKEN_RE = /^b(\d+)c(\d+)h(\d+)f(\d+)o(\d+)$/;
+  const DEFAULT_TOKEN = "b1c1h1f1o0";
+  const FREE_IDS = ["b1", "b2", "b3", "c1", "c2", "c3", "h1", "h2", "h3", "f1", "f2", "f3", "o0", "o1", "o2"];
+  const PARTS = {
+    b: { label: "🍜 ชาม", vars: { 1: { n: "ชามกระเบื้อง", c: "#5b7fa6" }, 2: { n: "ชามไม้", c: "#a9714b" }, 3: { n: "ชามสแตนเลส", c: "#b9b9b9" }, 4: { n: "ชามทองคำ", c: "#e9c93c" }, 5: { n: "ชามซากุระ", c: "#f5a3c0" } } },
+    c: { label: "👕 ตัว", vars: { 1: { n: "เสื้อขาว", c: "#e8e6f0" }, 2: { n: "เสื้อดำ", c: "#4a4a4a" }, 3: { n: "เสื้อแดง", c: "#d94f4f" }, 4: { n: "เอี๊ยมเชฟเหลือง", c: "#ffcc00" }, 5: { n: "เสื้อฮาวาย", c: "#5aa7e8" } } },
+    h: { label: "🙂 หัว", vars: { 1: { n: "ผมดำ", c: "#3a2a20" }, 2: { n: "ผมส้ม", c: "#e67e22" }, 3: { n: "ผมม่วง", c: "#b48ce0" }, 4: { n: "ผมฟ้าคราม", c: "#5aa7e8" }, 5: { n: "ผมทอง", c: "#e9c93c" } } },
+    f: { label: "😊 หน้า", vars: { 1: { n: "ตาดำ", c: "#3a2a20" }, 2: { n: "ตาฟ้า", c: "#5aa7e8" }, 3: { n: "ตาเขียว", c: "#5cb85c" }, 4: { n: "ตาปีศาจแดง", c: "#e74c3c" } } },
+    o: { label: "🎩 หมวก", vars: { 0: { n: "ไม่ใส่", c: "#000" }, 1: { n: "หมวกเชฟ", c: "#ffffff" }, 2: { n: "หมวกฟาง", c: "#e9c93c" }, 3: { n: "กิมหยง", c: "#5aa7e8" }, 4: { n: "หมวกเชฟทอง", c: "#e9c93c" } } },
+  };
+  // pixel map แต่ละชั้น 16×16 (วาดซ้อนกัน: ชาม→ตัว→หัว→หน้า→หมวก) — ช่องว่าง "." = ใส
+  const MAPS = {
+    head: [
+      ".....HHHHHH.....",
+      "...HHHHHHHHHH...",
+      "..HHHHHHHHHHHH..",
+      "..HHHHHHHHHHHH..",
+      "..HHFFFFFFFFHH..",
+      ".HHFFFFFFFFFFHH.",
+      ".HHFFFFFFFFFFHH.",
+      "...FFFFFFFFFF...",
+    ],
+    face: [
+      ".....E....E.....",
+      ".......M........",
+    ],
+    body: [
+      "....CCCCCCCC....",
+      "...CCCCCCCCCC...",
+      "...CCCCCCCCCC...",
+      "...CCCCCCCCCC...",
+      "....CCCCCCCC....",
+    ],
+    bowl: [
+      "....BBBBBBBB....",
+      "..BBBBBBBBBBBB..",
+      "..BBBBBBBBBBBB..",
+    ],
+    chef: [".....OOOOOO.....", "....OOOOOOOO....", "....OOOOOOOO....", "....OOOOOOOO...."],
+    straw: [".....OOOOOO.....", "....OOOOOOOO....", "...OOOOOOOOOO...", "...OOOOOOOOOO..."],
+    band: ["..OOOOOOOOOOOO..", "..OOOOOOOOOOOO.."],
+    gold: ["....OOOOOOOO....", "...OOOOOOOOOO...", "...OOOOOOOOOO...", "...OOOOOOOOOO..."],
+  };
+  // ชิ้นส่วนวาดเอง (สตูดิโอ) — โหลดจาก server ตอนเปิดหน้า
+  const CUSTOM_PARTS = {}; // { "b6": {id,type,name,colorA,colorB,map,price} }
+  (async () => {
+    try {
+      const r = await fetch("/parts");
+      const d = await r.json();
+      (d.parts || []).forEach((p) => { CUSTOM_PARTS[p.id] = p; });
+    } catch { /* ข้าม */ }
+  })();
   const EMOJI_COLORS = {
     "🦊": "#e67e22", "🐱": "#f6a821", "🐶": "#a9714b", "🐼": "#4a4a4a", "🦁": "#e8b93c",
     "🐸": "#5cb85c", "🐵": "#b08968", "🦄": "#b48ce0", "🐯": "#e67e22", "🐨": "#8d9ba8",
     "🐰": "#f0b9c8", "🐷": "#f5a3c0", "🐮": "#b9b9b9", "🐹": "#d9a05b", "🐧": "#5b7fa6",
     "🐦": "#5aa7e8", "🐢": "#6fbf73", "🐙": "#c77bd8", "🦋": "#9d7ce0", "🐝": "#e9c93c"
   };
-  const AVATARS = Object.keys(EMOJI_COLORS);
-  let myAvatar = localStorage.getItem("chatavatar") || "";
-  if (!EMOJI_COLORS[myAvatar]) myAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-
-  // ปุ่มเลือกตัวละครใน modal
-  const emojiRow = $("emojiRow");
-  AVATARS.forEach((e) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = e;
-    if (e === myAvatar) b.classList.add("sel");
-    b.addEventListener("click", () => {
-      emojiRow.querySelectorAll("button").forEach((x) => x.classList.remove("sel"));
-      b.classList.add("sel");
-      myAvatar = e;
-    });
-    emojiRow.appendChild(b);
-  });
-
-  // ---- pixel art sprite 8x8 (วาดเองด้วย canvas ไม่พึ่ง dependency) ----
+  // legacy sprite (อีโมจิเก่า) — เก็บไว้ให้คนที่ยังไม่แต่งตัว
   const SPRITE = [
-    "..HHHH..",
-    ".HHHHHH.",
-    "...FF...",
-    "..FEF...",
-    ".CCCCCC.",
-    ".CCCCCC.",
-    ".CC..CC.",
-    ".LL..LL.",
+    "..HHHH..", ".HHHHHH.", "...FF...", "..FEF...", ".CCCCCC.", ".CCCCCC.", ".CC..CC.", ".LL..LL.",
   ];
+  let myAvatar = localStorage.getItem("chatavatar") || "";
+  if (!EMOJI_COLORS[myAvatar] && !TOKEN_RE.test(myAvatar)) myAvatar = DEFAULT_TOKEN;
+
   const shade = (hex, f) => {
     const n = parseInt(hex.slice(1), 16);
     return `rgb(${Math.round(((n >> 16) & 255) * f)},${Math.round(((n >> 8) & 255) * f)},${Math.round((n & 255) * f)})`;
   };
-  function pixelSprite(avatar) {
-    const primary = EMOJI_COLORS[avatar] || "#607d8b";
-    const colors = { H: shade(primary, 0.7), F: "#f2c9a0", E: "#3a2a20", C: primary, L: "#4a4a4a" };
+  const parseToken = (t) => { const m = TOKEN_RE.exec(t); return m ? { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] } : { b: 1, c: 1, h: 1, f: 1, o: 0 }; };
+  const tokenOf = (t) => `b${t.b}c${t.c}h${t.h}f${t.f}o${t.o}`;
+  const bowlColor = (avatar) => { const m = TOKEN_RE.exec(avatar); return m ? PARTS.b.vars[+m[1]].c : "#d9c08f"; };
+  // เรนเดอร์ sprite 16×16 ขยาย size เท่า (withBowl=true = วาดชามในภาพ ใช้พรีวิวแต่งตัว)
+  function renderSprite(avatar, size = 96, withBowl = false) {
+    const m = TOKEN_RE.exec(avatar);
     const cv = document.createElement("canvas");
-    cv.width = 8; cv.height = 8;
+    cv.width = 16; cv.height = 16;
     const ctx = cv.getContext("2d");
-    SPRITE.forEach((row, y) => [...row].forEach((ch, x) => {
-      if (ch !== ".") { ctx.fillStyle = colors[ch]; ctx.fillRect(x, y, 1, 1); }
+    const v = (p, id) => PARTS[p].vars[id] || PARTS[p].vars[1];
+    const draw = (map, cols, off, cell = 1) => map.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch !== ".") { ctx.fillStyle = cols[ch] || "#fff"; ctx.fillRect(x * cell, (off + y) * cell, cell, cell); }
     }));
+    const part = (p, id) => CUSTOM_PARTS[p + id] || null; // ชิ้นส่วนวาดเอง (มี map ของตัวเอง)
+    if (m) {
+      const t = { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] };
+      const bp = part("b", t.b);
+      if (withBowl) draw(bp ? bp.map : MAPS.bowl, bp ? { A: bp.colorA, B: bp.colorB } : { B: shade(v("b", t.b).c, 0.95), D: shade(v("b", t.b).c, 0.6) }, 13);
+      const hp = part("h", t.h);
+      draw(hp ? hp.map : MAPS.head, hp ? { A: hp.colorA, B: hp.colorB } : { H: shade(v("h", t.h).c, 0.65), F: "#f2c9a0" }, 0);
+      const cp = part("c", t.c);
+      draw(cp ? cp.map : MAPS.body, cp ? { A: cp.colorA, B: cp.colorB } : { C: v("c", t.c).c }, 8);
+      const fp = part("f", t.f);
+      draw(fp ? fp.map : MAPS.face, fp ? { A: fp.colorA, B: fp.colorB } : { E: v("f", t.f).c, M: "#7a4a30" }, 6);
+      const op = part("o", t.o);
+      if (op) draw(op.map, { A: op.colorA, B: op.colorB }, 0);
+      else { const om = { 1: "chef", 2: "straw", 3: "band", 4: "gold" }[t.o]; if (om) draw(MAPS[om], { O: v("o", t.o).c }, om === "band" ? 4 : 0); }
+    } else {
+      const primary = EMOJI_COLORS[avatar] || "#607d8b";
+      draw(SPRITE, { H: shade(primary, 0.7), F: "#f2c9a0", E: "#3a2a20", C: primary, L: "#4a4a4a" }, 0, 2);
+    }
     const out = document.createElement("canvas");
-    out.width = 48; out.height = 48;
+    out.width = size; out.height = size;
     const o = out.getContext("2d");
     o.imageSmoothingEnabled = false;
-    o.drawImage(cv, 0, 0, 48, 48);
+    o.drawImage(cv, 0, 0, size, size);
     return out.toDataURL();
   }
+  function pixelSprite(avatar) { return renderSprite(avatar, 96, false); }
 
   // ---- Google login (บังคับ) + จองชื่อ (กันชื่อซ้ำ) ----
-  const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose"), gsiBox = $("gsiBox"), gsiStatus = $("gsiStatus"), logoutBtn = $("logoutBtn");
+  const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose"), gsiBox = $("gsiBox"), gsiStatus = $("gsiStatus"), logoutBtn = $("logoutBtn"), modalAvatarRow = $("modalAvatarRow"), modalAvatar = $("modalAvatar");
   // ชื่อเล่นเริ่มต้นแบบสุ่ม (ไร้ตัวตน — ไม่เอาชื่อจริงมาโชว์ในแชท)
   const defaultName = () => "ราเมง" + (1000 + Math.floor(Math.random() * 9000));
   let gsiInited = false;
@@ -275,7 +364,8 @@
         : "⚠️ ผู้ดูแลยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID — ดู วิธีใช้.md";
     // ยังไม่ login = ยังไม่ต้องใส่ชื่อ/เลือกตัวละคร — จะโผล่ให้เฉพาะหลัง login สำเร็จ
     modalName.style.display = logged ? "block" : "none";
-    emojiRow.style.display = logged ? "flex" : "none";
+    modalAvatarRow.style.display = logged ? "flex" : "none";
+    if (logged) modalAvatar.src = pixelSprite(myAvatar);
     modalGo.style.display = logged ? "block" : "none";
     logoutBtn.style.display = logged ? "block" : "none";
     if (logged) modalName.focus();
@@ -501,21 +591,22 @@
   // ---- ร้านตัวละคร: โชว์คนที่อยู่ในห้องเป็น pixel art + คะแนน/เลเวล (poll ทุก 2 วิ) ----
   const shopGrid = $("shopGrid");
   let lastLevel = localStorage.getItem("chatlevel") || null;
+  let myHearts = -1; // -1 = รอบแรก ยังไม่แจ้งเตือน
   async function pollUsers() {
     try {
       const r = await fetch("/users");
       const { users } = await r.json();
       shopGrid.innerHTML = users.map((u) => {
         const mine = u.name === myName ? " me" : "";
-        const lvl = u.title ? `${u.icon} ${esc(u.title)} · ${u.points}` : "";
-        // แถบความคืบหน้า + "อีก X แต้มถึงเลเวลหน้า" — เห็นความคืบหน้าแล้วอยากอยู่ต่อ
+        const lvl = u.title ? `${u.icon} ${esc(u.title)}` : "";
+        // แถบความคืบหน้า
         const bar = u.pct !== undefined ? `<div class="char-prog"><i style="width:${u.pct}%"></i></div>` : "";
         // โควต้าวันนี้เต็ม → บอกแทนการนับแต้ม (กันสับสนว่าทำไมไม่ขึ้น)
         const capped = u.dayCap && u.dayPoints >= u.dayCap;
         const nxt = capped ? `<div class="char-next">วันนี้ได้ครบแต้มแล้ว 🛑</div>`
-          : u.toNext > 0 ? `<div class="char-next">อีก ${u.toNext} → ${u.nextIcon} ${esc(u.nextTitle)}</div>`
-          : (u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "");
-        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="bowl"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+          : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "";
+        const bc = bowlColor(u.avatar);
+        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="bowl" style="--bc:${bc};--bd:${shade(bc, 0.75)}"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
       }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
       // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
       const me = users.find((u) => u.name === myName);
@@ -524,21 +615,25 @@
         lastLevel = me.title;
         localStorage.setItem("chatlevel", me.title);
       }
+      // โดนส่งหัวใจ — แจ้งเตือน (เฉพาะตอนจำนวนหัวใจเพิ่มขึ้น)
+      if (me && myHearts >= 0 && me.hearts > myHearts) toast("💗 มีคนส่งหัวใจให้คุณ!");
+      if (me) myHearts = me.hearts;
     } catch { /* ข้ามรอบ */ }
   }
   pollUsers();
   setInterval(pollUsers, 2000);
 
   // ---- หน้าโปรไฟล์: กดตัวละครในร้าน / ชื่อในแชท → ดูโปรไฟล์สาธารณะ ----
-  const profileModal = $("profileModal"), profAvatar = $("profAvatar"), profName = $("profName"), profStatus = $("profStatus"), profLevel = $("profLevel"), profMeta = $("profMeta"), profEdit = $("profEdit"), profErr = $("profErr");
+  const profileModal = $("profileModal"), profAvatar = $("profAvatar"), profName = $("profName"), profStatus = $("profStatus"), profLevel = $("profLevel"), profHearts = $("profHearts"), profHeart = $("profHeart"), profMeta = $("profMeta"), profEdit = $("profEdit"), profErr = $("profErr");
   async function openProfile(name) {
     profErr.textContent = "";
     profileModal.style.display = "flex";
     profName.textContent = name;
     profStatus.textContent = "กำลังโหลด...";
     profEdit.style.display = "none"; // ซ่อนไว้ก่อนเสมอ — จะโชว์เฉพาะโปรไฟล์ตัวเองเท่านั้น
+    profHeart.style.display = "none"; // ซ่อนก่อนเสมอ — จะโชว์เฉพาะตอนดูคนอื่น
     try {
-      const r = await fetch("/profile?name=" + encodeURIComponent(name));
+      const r = await fetch("/profile?name=" + encodeURIComponent(name) + (mySession ? "&session=" + encodeURIComponent(mySession) : ""));
       const d = await r.json();
       if (!r.ok) { profErr.textContent = d.error || "ไม่พบผู้ใช้"; profStatus.textContent = ""; return; }
       profAvatar.src = pixelSprite(d.avatar);
@@ -546,6 +641,13 @@
       profStatus.textContent = d.online ? "🟢 ออนไลน์" : "⚪ ออฟไลน์";
       profStatus.style.color = d.online ? "#7ee08a" : "#8a84a8";
       profLevel.textContent = `${d.icon} ${d.level}`;
+      profHearts.textContent = `💗 หัวใจ ${d.hearts || 0}`;
+      // ปุ่มให้หัวใจ — ดูคนอื่นเท่านั้น, ให้แล้ววันนี้ = กดไม่ได้
+      if (d.name !== myName) {
+        profHeart.style.display = "block";
+        profHeart.disabled = !!d.givenToday;
+        profHeart.textContent = d.givenToday ? "ให้แล้ววันนี้ 💗" : "💗 ให้หัวใจ";
+      }
       const dt = (ms) => new Date(ms).toLocaleDateString("th-TH");
       profMeta.textContent = `เข้าร่วมร้าน ${dt(d.joined)} · ออนไลน์ล่าสุด ${dt(d.lastSeen)}`;
       // ปุ่มเปลี่ยนชื่อ/อวตาร — เฉพาะตอนดูโปรไฟล์ตัวเอง
@@ -554,6 +656,23 @@
       profErr.textContent = "โหลดโปรไฟล์ไม่สำเร็จ";
     }
   }
+  // กดหัวใจให้เพื่อน (วันละ 1 ครั้ง)
+  profHeart.addEventListener("click", async () => {
+    const name = profName.textContent;
+    if (!mySession) return (profErr.textContent = "ต้องเข้าสู่ระบบก่อน");
+    profErr.textContent = "";
+    const r = await fetch("/heart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, session: mySession }),
+    });
+    const d = await r.json();
+    if (!r.ok) return (profErr.textContent = d.error || "ให้หัวใจไม่สำเร็จ");
+    profHeart.disabled = true;
+    profHeart.textContent = "ให้แล้ววันนี้ 💗";
+    profHearts.textContent = `💗 หัวใจ ${d.hearts}`;
+    toast(`ส่งหัวใจให้ ${name} แล้ว 💗`);
+  });
   $("profClose").addEventListener("click", () => (profileModal.style.display = "none"));
   profileModal.addEventListener("click", (e) => e.target === profileModal && (profileModal.style.display = "none"));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && profileModal.style.display === "flex") profileModal.style.display = "none"; });
@@ -561,6 +680,92 @@
     profileModal.style.display = "none";
     nameBtn.click(); // เปิด modal ตั้งชื่อ/อวตารเดิม
   });
+
+  // ---- แต่งตัว + ร้านค้าอวตาร (ซื้อชิ้นส่วนด้วยหัวใจ) ----
+  const dressModal = $("dressModal"), dressPreview = $("dressPreview"), dressHearts = $("dressHearts"), dressTabs = $("dressTabs"), dressGrid = $("dressGrid"), dressSave = $("dressSave"), dressErr = $("dressErr");
+  let dressToken = DEFAULT_TOKEN, ownedParts = [], shopItems = [], dressTab = "b", heartBalance = 0;
+  async function openDress() {
+    if (!mySession) return toast("เข้าสู่ระบบด้วย Google ก่อน");
+    dressErr.textContent = "";
+    dressToken = TOKEN_RE.test(myAvatar) ? myAvatar : DEFAULT_TOKEN;
+    const r = await fetch("/me?session=" + encodeURIComponent(mySession));
+    const d = await r.json();
+    if (!r.ok) return toast(d.error || "โหลดข้อมูลไม่สำเร็จ");
+    ownedParts = d.owned || [];
+    heartBalance = d.hearts || 0;
+    dressModal.style.display = "flex";
+    dressTab = "b";
+    renderDress();
+  }
+  function setDressTab(k) { dressTab = k; renderDress(); }
+  function dressSet(p, id) { const t = parseToken(dressToken); t[p] = id; dressToken = tokenOf(t); renderDress(); }
+  function renderDress() {
+    dressPreview.src = renderSprite(dressToken, 128, true);
+    dressHearts.textContent = `💗 หัวใจ ${heartBalance}`;
+    dressTabs.innerHTML = [
+      ["b", "🍜 ชาม"], ["c", "👕 ตัว"], ["h", "🙂 หัว"], ["f", "😊 หน้า"], ["o", "🎩 หมวก"], ["shop", "🛒 ร้านค้า"],
+    ].map(([k, l]) => `<button class="${k === dressTab ? "on" : ""}" onclick="setDressTab('${k}')">${l}</button>`).join("");
+    if (dressTab === "shop") return renderShop();
+    const p = dressTab;
+    const curId = parseToken(dressToken)[p];
+    const items = Object.entries(PARTS[p].vars).map(([id, v]) => ({ id: p + id, n: v.n, price: 0 }))
+      .concat(Object.values(CUSTOM_PARTS).filter((x) => x.type === p).map((x) => ({ id: x.id, n: x.name, price: x.price || 0 })));
+    dressGrid.innerHTML = items.map((it) => {
+      const vid = +it.id.slice(1);
+      const t = parseToken(dressToken); t[p] = vid;
+      const tok = tokenOf(t);
+      const own = ownedParts.includes(it.id) || !it.price; // ชิ้นส่วนฟรี = ใช้ได้ทุกคน
+      return `<div class="dvar ${vid === curId ? "on" : ""} ${own ? "" : "locked"}" title="${own ? "" : "ต้องซื้อจากร้านค้าก่อน"}" ${own ? `onclick="dressSet('${p}',${vid})"` : ""}>
+        <img src="${renderSprite(tok, 64, true)}" alt="${esc(it.n)}"><span>${esc(it.n)}</span>${it.price ? `<b style="color:#ff6ec7">${it.price} 💗</b>` : ""}</div>`;
+    }).join("");
+  }
+  async function renderShop() {
+    if (!shopItems.length) {
+      const r = await fetch("/shop");
+      const d = await r.json();
+      if (r.ok) shopItems = d.items || [];
+    }
+    dressGrid.innerHTML = shopItems.map((it) => {
+      const own = ownedParts.includes(it.id);
+      const t = parseToken(dressToken); t[it.id[0]] = +it.id.slice(1);
+      return `<div class="dvar" title="${esc(it.desc || "")}">
+        <img src="${renderSprite(tokenOf(t), 64, true)}" alt="${esc(it.name)}">
+        <span>${esc(it.name)}</span><b style="color:#ff6ec7">${it.price} 💗</b>
+        ${own ? "<i>มีแล้ว ✓</i>" : `<button onclick="buyPart('${it.id}')" ${heartBalance < it.price ? "disabled" : ""}>ซื้อ</button>`}
+      </div>`;
+    }).join("");
+  }
+  async function buyPart(id) {
+    const r = await fetch("/shop/buy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, session: mySession }) });
+    const d = await r.json();
+    if (!r.ok) return (dressErr.textContent = d.error || "ซื้อไม่สำเร็จ");
+    ownedParts = d.owned;
+    heartBalance = d.hearts;
+    dressErr.textContent = "ซื้อสำเร็จ! ไปใส่ได้เลย 🎉";
+    renderDress();
+  }
+  dressSave.addEventListener("click", async () => {
+    if (!myName) {
+      // ยังไม่เข้าแชท — แค่เซฟชุดไว้
+      myAvatar = dressToken;
+      localStorage.setItem("chatavatar", dressToken);
+      modalAvatar.src = pixelSprite(myAvatar);
+      dressModal.style.display = "none";
+      return;
+    }
+    const res = await fetch("/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName, avatar: dressToken, session: mySession }) });
+    const d = await res.json();
+    if (!res.ok) return (dressErr.textContent = d.error || "บันทึกไม่สำเร็จ");
+    myAvatar = dressToken;
+    localStorage.setItem("chatavatar", dressToken);
+    dressModal.style.display = "none";
+    toast("เปลี่ยนชุดแล้ว 🎨");
+  });
+  $("dressClose").addEventListener("click", () => (dressModal.style.display = "none"));
+  dressModal.addEventListener("click", (e) => e.target === dressModal && (dressModal.style.display = "none"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && dressModal.style.display === "flex") dressModal.style.display = "none"; });
+  $("modalDress").addEventListener("click", openDress);
+
   // กดตัวละครในร้าน = ดูโปรไฟล์
   shopGrid.addEventListener("click", (e) => {
     const ch = e.target.closest(".char");

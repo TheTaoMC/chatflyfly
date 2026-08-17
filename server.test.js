@@ -45,6 +45,7 @@ let api; // exports จาก server.js
 test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA จริง)", async (t) => {
   const identitiesFile = path.join(os.tmpdir(), `ramen-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   const banFile = path.join(os.tmpdir(), `ramen-ban-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  const partsFile = path.join(os.tmpdir(), `ramen-parts-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
 
   const jwksSrv = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -61,6 +62,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   process.env.POINT_COOLDOWN_MS = "300"; // เทสต์เร็วๆ — cooldown สั้น
   process.env.DAILY_POINT_CAP = "6"; // เทสต์โควต้า
   process.env.PORT = "0";
+  process.env.PARTS_FILE = partsFile;
 
   api = require("./server.js");
   await new Promise((r) => api.server.listen(0, r));
@@ -88,6 +90,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     await new Promise((r) => { jwksSrv.closeAllConnections(); jwksSrv.close(r); });
     try { fs.rmSync(identitiesFile, { force: true }); } catch {}
     try { fs.rmSync(banFile, { force: true }); } catch {}
+    try { fs.rmSync(partsFile, { force: true }); } catch {}
   });
 
   // ── verifyGoogleJwt ──
@@ -387,5 +390,133 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     api.activeNames.delete("ประวัติ12");
     api.retiredNames.delete("ประวัติ12");
     assert.equal((await post("/claim", { name: "ประวัติ12", avatar: "🐸", session: sessB2 })).status, 200);
+  });
+
+  // ── กดหัวใจให้เพื่อน (วันละ 1 ครั้ง, สะสมใน identities) ──
+  await t.test("heart: ให้เพื่อนวันละ 1 ครั้ง, สะสมหัวใจ, ให้ตัวเอง/ซ้ำวันไม่ได้", async () => {
+    // ผู้ให้ = gid-123 (ชื่อ "ผู้ให้หัวใจ") / ผู้รับ = gid-999 (ชื่อ "ผู้รับหัวใจ")
+    const g = (await (await post("/google-login", { credential: makeJwt(validClaims()) })).json()).token;
+    const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
+    assert.equal((await post("/claim", { name: "ผู้ให้หัวใจ", avatar: "🦊", session: g })).status, 200);
+    assert.equal((await post("/claim", { name: "ผู้รับหัวใจ", avatar: "🐸", session: r2 })).status, 200);
+
+    // ไม่มี session → 401
+    assert.equal((await post("/heart", { name: "ผู้รับหัวใจ" })).status, 401);
+    // ให้ตัวเอง → 400
+    assert.equal((await post("/heart", { name: "ผู้ให้หัวใจ", session: g })).status, 400);
+    // ผู้รับไม่มีตัวตน → 404
+    assert.equal((await post("/heart", { name: "ไม่มีตัวตน", session: g })).status, 404);
+
+    // ให้เพื่อน → 200 + สะสม 1
+    const h = await post("/heart", { name: "ผู้รับหัวใจ", session: g });
+    assert.equal(h.status, 200);
+    assert.equal((await h.json()).hearts, 1);
+    // ให้ซ้ำวันเดียวกัน → 409
+    const again = await post("/heart", { name: "ผู้รับหัวใจ", session: g });
+    assert.equal(again.status, 409);
+    assert.match((await again.json()).error, /วันนี้ให้หัวใจ/);
+
+    // identities.json: ผู้รับมี hearts + heartsRecent, ผู้ให้มี heartsGiven วันนี้
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const recv = saved.find((i) => i.nickname === "ผู้รับหัวใจ");
+    assert.equal(recv.hearts, 1);
+    assert.equal(recv.heartsRecent[0].from, "ผู้ให้หัวใจ");
+    assert.equal(saved.find((i) => i.nickname === "ผู้ให้หัวใจ").heartsGiven.name, "ผู้รับหัวใจ");
+
+    // /users โชว์หัวใจ (สาธารณะเห็นจำนวน)
+    const { users } = await (await get("/users")).json();
+    assert.equal(users.find((u) => u.name === "ผู้รับหัวใจ").hearts, 1);
+    // /profile โชว์ hearts + givenToday (ส่ง session ผู้ให้ → ให้แล้ววันนี้ = true)
+    const pr = await (await get("/profile?name=" + encodeURIComponent("ผู้รับหัวใจ") + "&session=" + g)).json();
+    assert.equal(pr.hearts, 1);
+    assert.equal(pr.givenToday, true);
+    assert.equal(pr.email, undefined); // ห้ามรั่ว
+    // profile ไม่มี session → givenToday = false
+    const pr2 = await (await get("/profile?name=" + encodeURIComponent("ผู้รับหัวใจ"))).json();
+    assert.equal(pr2.givenToday, false);
+
+    // วันใหม่ (จำลอง heartsGiven ย้อนหลัง) → ให้ได้อีก + สะสมต่อ
+    api.identities.get("gid-123").heartsGiven.date = "2000-01-01";
+    const h2 = await post("/heart", { name: "ผู้รับหัวใจ", session: g });
+    assert.equal(h2.status, 200);
+    assert.equal((await h2.json()).hearts, 2);
+  });
+
+  // ── ร้านค้าอวตาร (ซื้อชิ้นส่วนด้วยหัวใจ) ──
+  await t.test("shop: รายการสินค้า + /me คืน owned + ซื้อด้วยหัวใจ (ตัดเงิน, กันซ้ำ)", async () => {
+    // รายการสินค้า
+    const shop = await (await get("/shop")).json();
+    assert.equal(shop.items.length, 9);
+    assert.ok(shop.items.some((i) => i.id === "b4" && i.price === 50));
+    // /me ไม่มี session → 401
+    assert.equal((await get("/me")).status, 401);
+    // login gid-999 (มี nickname "ผู้รับหัวใจ" จากเทสต์ heart)
+    const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
+    const me = await (await get("/me?session=" + r2)).json();
+    assert.equal(me.nickname, "ผู้รับหัวใจ");
+    assert.ok(me.owned.includes("b1") && me.owned.includes("o2"), "มีชุดฟรีครบ");
+    // หัวใจไม่พอ → 400
+    const poor = await post("/shop/buy", { id: "b4", session: r2 });
+    assert.equal(poor.status, 400);
+    // ตั้งหัวใจ 50 → ซื้อ b4 (ชามทองคำ) ได้ → เหลือ 0
+    api.identities.get("gid-999").hearts = 50;
+    const buy = await post("/shop/buy", { id: "b4", session: r2 });
+    assert.equal(buy.status, 200);
+    const bd = await buy.json();
+    assert.equal(bd.hearts, 0);
+    assert.ok(bd.owned.includes("b4"));
+    // ซื้อซ้ำ → 409
+    assert.equal((await post("/shop/buy", { id: "b4", session: r2 })).status, 409);
+    // สินค้าไม่มี → 404 / ไม่มี session → 401
+    assert.equal((await post("/shop/buy", { id: "zz9", session: r2 })).status, 404);
+    assert.equal((await post("/shop/buy", { id: "b4" })).status, 401);
+    // identities.json เก็บ owned + หัวใจโดนตัด
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const buyer = saved.find((i) => i.sub === "gid-999");
+    assert.ok(buyer.owned.includes("b4"));
+    assert.equal(buyer.hearts, 0);
+    // /claim เก็บ avatar token
+    assert.equal((await post("/claim", { name: "ผู้รับหัวใจ", avatar: "b2c1h1f1o0", session: r2 })).status, 200);
+    const after = JSON.parse(fs.readFileSync(identitiesFile, "utf8")).find((i) => i.sub === "gid-999");
+    assert.equal(after.avatar, "b2c1h1f1o0");
+  });
+
+  // ── สตูดิโอวาดชุด (admin วาดชิ้นส่วน 16×16 → parts.json + ร้านค้า) ──
+  await t.test("parts: admin บันทึกชิ้นส่วน, /parts คืน, ขึ้นร้านค้า, ซื้อได้", async () => {
+    const MAP16 = Array(16).fill("................");
+    MAP16[0] = "AAAA........AAAA";
+    // ไม่มี token → 401
+    assert.equal((await post("/parts", { type: "b", name: "x", colorA: "#ff0000", colorB: "#00ff00", map: MAP16, price: 0 })).status, 401);
+    // map ไม่ถูกต้อง → 400
+    assert.equal((await post("/parts", { type: "b", name: "x", colorA: "#ff0000", colorB: "#00ff00", map: ["bad"], price: 0 }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 400);
+    // admin บันทึกสำเร็จ → id ถัดไปของ type b = b6
+    const save = await post("/parts", { type: "b", name: "ชามลายไทย", colorA: "#ff0000", colorB: "#00ff00", map: MAP16, price: 10 }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    assert.equal(save.status, 200);
+    const sid = (await save.json()).id;
+    assert.equal(sid, "b6");
+    // /parts คืนชิ้นส่วน
+    const parts = await (await get("/parts")).json();
+    assert.ok(parts.parts.some((p) => p.id === "b6" && p.name === "ชามลายไทย"));
+    // ขึ้นร้านค้า (ตั้งราคาไว้ 10)
+    const shop = await (await get("/shop")).json();
+    assert.ok(shop.items.some((i) => i.id === "b6" && i.price === 10));
+    // parts.json เขียนจริง
+    assert.ok(JSON.parse(fs.readFileSync(partsFile, "utf8")).some((p) => p.id === "b6"));
+    // ผู้ใช้ซื้อ custom part ได้
+    const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
+    api.identities.get("gid-999").hearts = 20;
+    const buy = await post("/shop/buy", { id: "b6", session: r2 });
+    assert.equal(buy.status, 200);
+    assert.ok((await buy.json()).owned.includes("b6"));
+    // เจอ id ซ้ำไม่ได้ (กันชน) — วาดอีกชิ้น type b → b7
+    const save2 = await post("/parts", { type: "b", name: "อีกชิ้น", colorA: "#111111", colorB: "#222222", map: MAP16, price: 0 }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    assert.equal((await save2.json()).id, "b7");
+    // ลบชิ้นส่วน (admin) → หายจาก /parts + ร้านค้า / ไม่มี token → 401
+    assert.equal((await post("/parts/delete", { id: "b7" })).status, 401);
+    assert.equal((await post("/parts/delete", { id: "b7" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 200);
+    const after = await (await get("/parts")).json();
+    assert.ok(!after.parts.some((p) => p.id === "b7"), "ลบแล้วต้องหายจาก /parts");
+    // ลบของที่ไม่มี → 404
+    assert.equal((await post("/parts/delete", { id: "b7" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 404);
   });
 });
