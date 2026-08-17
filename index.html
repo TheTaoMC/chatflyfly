@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" href="data:," /> <!-- ไม่ให้ browser ขอ favicon แล้วเจอ 404 -->
 <title>กลุ่มแชท</title>
+<!-- Google login (บังคับ) — ต้องตั้ง GOOGLE_CLIENT_ID ที่ server ถึงจะใช้งานได้ -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   /* ═══════════ ธีม pixel art retro (arcade/CRT) ═══════════ */
   * { box-sizing: border-box; }
@@ -19,17 +21,36 @@
     background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 2px, transparent 2px 4px);
   }
   #chatSide { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  /* ---- ร้านตัวละคร (ฝั่งซ้าย) ---- */
-  #shop { width: 200px; background: #171122; border-right: 4px solid #0a0713; display: flex; flex-direction: column; overflow: hidden; }
-  #shop h3 { margin: 0; padding: 10px 8px; color: #ffcc00; font-size: 13px; letter-spacing: 2px; background: #241b3b; border-bottom: 3px solid #0a0713; text-shadow: 2px 2px 0 #000; }
-  #shopGrid { flex: 1; overflow-y: auto; padding: 10px 8px 0; display: flex; flex-direction: column; gap: 10px; }
+  /* ---- ร้านราเมง (ฝั่งซ้าย) — บรรยากาศร้านราเมง: โคมแดง, นอเรน, เคาน์เตอร์ไม้, ชามราเมงมีไอน้ำ ---- */
+  #shop { width: 200px; background: #241108; background-image: repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 2px, transparent 2px 46px), repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 22px, transparent 22px 44px); border-right: 4px solid #0a0713; display: flex; flex-direction: column; overflow: hidden; }
+  /* โคมแดงห้อยจากเพดาน — แสงอุ่นส่องถึงร้าน */
+  #lantern { position: relative; height: 30px; background: #170b06; display: flex; justify-content: center; border-bottom: 2px solid #0a0713; }
+  #lantern i { position: relative; width: 22px; height: 26px; margin-top: 2px; background: radial-gradient(circle at 50% 62%, #ff8a5c, #d63a1c 65%, #8c1d0b); border-radius: 50%; box-shadow: 0 0 16px 4px rgba(255,120,60,.45); }
+  #lantern i::before { content: ""; position: absolute; top: -8px; left: 50%; width: 2px; height: 8px; background: #000; }
+  #lantern i::after { content: ""; position: absolute; bottom: -4px; left: 50%; width: 2px; height: 4px; background: #6b3a12; }
+  /* นอเรน (ม่านหน้าร้าน) แดงสลับเข้ม */
+  #shop h3 { margin: 0; padding: 10px 8px; color: #ffe9c4; font-size: 13px; letter-spacing: 2px; background: repeating-linear-gradient(90deg, #c8341f 0 12px, #a92a12 12px 18px, #d63a1c 18px 30px, #b52e16 30px 36px); border-bottom: 3px solid #0a0713; text-shadow: 2px 2px 0 #57130a; }
+  #shopGrid { flex: 1; overflow-y: auto; padding: 12px 8px 0; display: flex; flex-direction: column; gap: 8px; }
   .char { text-align: center; }
   .char img { width: 48px; height: 48px; image-rendering: pixelated; display: block; margin: 0 auto; }
   .char.me img { outline: 3px solid #ffcc00; box-shadow: 0 0 0 3px #000; }
-  .char-name { color: #c9c2e6; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char-name { color: #e8c9a0; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .char.me .char-name { color: #ffcc00; font-weight: 700; }
-  #shopGrid .empty { color: #6f6890; font-size: 12px; text-align: center; padding: 20px 0; }
-  #floor { height: 26px; background: repeating-linear-gradient(90deg, #6b4a2f 0 24px, #553a24 24px 48px); border-top: 3px solid #0a0713; }
+  .char-level { color: #ffb35c; font-size: 10px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char.me .char-level { color: #ffcc00; }
+  .char-next { color: #8a84a8; font-size: 10px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char-prog { height: 4px; background: #241b14; border: 1px solid #0a0713; margin-top: 3px; }
+  .char-prog i { display: block; height: 100%; background: linear-gradient(90deg, #ffcc00, #ff9d5c); }
+  /* ชามราเมงหน้าเคาน์เตอร์ — ตัวละครนั่งอยู่หลังชาม (bowl ทับขาสไปรต์) + ไอน้ำลอยขึ้น */
+  .char .bowl { position: relative; z-index: 1; width: 32px; height: 14px; margin: -9px auto 0; background: linear-gradient(180deg, #f0dfb8, #d9c08f); border: 2px solid #8a5a28; border-radius: 4px 4px 10px 10px; box-shadow: 0 2px 0 #3a1c0a; }
+  .char .bowl::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 50% 30%, #e89a38, #b96a16 80%); }
+  .char .bowl .st { position: absolute; bottom: 70%; left: 28%; width: 4px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.5); filter: blur(1px); animation: steam 1.7s ease-out infinite; }
+  .char .bowl .st.s2 { left: 62%; animation-delay: .6s; }
+  @keyframes steam { 0% { transform: translate(0,0) scaleY(.6); opacity: 0; } 30% { opacity: .85; } 100% { transform: translate(3px,-16px) scaleY(1.5); opacity: 0; } }
+  #shopGrid .empty { color: #b08a5c; font-size: 12px; text-align: center; padding: 20px 0; }
+  /* เคาน์เตอร์ไม้ + พื้นไม้ */
+  #counter { height: 13px; background: repeating-linear-gradient(90deg, #7a4a24 0 22px, #6a3f1e 22px 44px); border-top: 3px solid #5a2f14; box-shadow: inset 0 2px 0 rgba(255,220,160,.12), 0 2px 0 rgba(0,0,0,.4); }
+  #floor { height: 26px; background: repeating-linear-gradient(90deg, #6b3f1e 0 24px, #59321a 24px 48px); border-top: 3px solid #0a0713; }
   header { background: linear-gradient(180deg, #3a2b63, #2a1d4d); color: #ffcc00; padding: 12px 16px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; border-bottom: 4px solid #0a0713; text-shadow: 2px 2px 0 #000; }
   #nameBtn { background: #241b3b; border: 2px solid #ffcc00; color: #ffcc00; padding: 5px 14px; font-size: 13px; font-weight: 700; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 3px 0 #000; }
   #headerBtns { display: flex; gap: 8px; }
@@ -45,12 +66,22 @@
   button { padding: 10px 18px; border: 2px solid #0a0713; background: #3a2b63; color: #ffcc00; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; box-shadow: 3px 3px 0 #000; }
   button:hover { background: #4a3d75; transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
   button:active { transform: translate(3px, 3px); box-shadow: none; }
+  /* ข้อความเสียง */
+  .msg audio { display: block; margin-top: 6px; max-width: 220px; height: 32px; }
+  #voiceBtn.rec { background: #a92a12; color: #fff; animation: recBlink 1s step-start infinite; }
+  @keyframes recBlink { 50% { opacity: .55; } }
   .msg img { max-width: 100%; max-height: 300px; border: 2px solid #0a0713; display: block; margin-top: 6px; cursor: pointer; }
   #gifPanel { position: fixed; bottom: 70px; left: 12px; right: 12px; max-width: 520px; background: #171122; border: 3px solid #0a0713; box-shadow: 6px 6px 0 rgba(0,0,0,.6); display: none; overflow: hidden; z-index: 9; }
   #gifSearch { width: 100%; padding: 10px 12px; border: none; border-bottom: 2px solid #4a3d75; background: #0e0b16; color: #fff; font-size: 14px; outline: none; font-family: inherit; }
   #gifGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; max-height: 260px; overflow-y: auto; }
   #gifGrid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; border: 2px solid #0a0713; }
   #gifGrid .empty { grid-column: 1/-1; text-align: center; color: #8a84a8; padding: 20px; font-size: 13px; }
+  /* หน้าทบทวนเสียงก่อนส่ง */
+  #voicePanel { position: fixed; bottom: 70px; left: 12px; right: 12px; max-width: 420px; background: #171122; border: 3px solid #0a0713; box-shadow: 6px 6px 0 rgba(0,0,0,.6); display: none; z-index: 9; padding: 10px 12px; color: #ffcc00; font-size: 13px; }
+  #voicePanel audio { width: 100%; height: 32px; margin: 8px 0; }
+  #voicePanelBtns { display: flex; gap: 8px; }
+  #voicePanelBtns button { flex: 1; }
+  #voiceSend { background: #17322a; border-color: #0f5a45; }
   #toast { position: fixed; top: 16px; right: 16px; background: #2a1d4d; color: #ffcc00; border: 2px solid #0a0713; box-shadow: 3px 3px 0 #000; padding: 10px 14px; display: none; z-index: 6; }
   #nameModal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 10; }
   .modal { position: relative; background: #1e1630; border: 3px solid #ffcc00; box-shadow: 8px 8px 0 rgba(0,0,0,.7); padding: 24px; width: 300px; text-align: center; }
@@ -59,7 +90,20 @@
   .modal h3 { margin: 0 0 12px; color: #ffcc00; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
   .modal input { width: 100%; }
   .modal button { margin-top: 10px; width: 100%; }
+  #gsiBox { display: flex; justify-content: center; margin: 10px 0 4px; }
+  #gsiStatus { color: #8a84a8; font-size: 12px; margin: 6px 0 2px; min-height: 16px; }
+  #logoutBtn { background: #3a1a14; color: #ff9d8c; }
   #modalErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  /* หน้าโปรไฟล์ */
+  .modal.prof { width: 280px; }
+  #profClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
+  #profClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
+  #profAvatar { width: 72px; height: 72px; image-rendering: pixelated; margin: 0 auto 6px; display: block; }
+  #profName { color: #ffcc00; font-weight: 700; font-size: 16px; }
+  #profStatus { font-size: 12px; margin-top: 2px; }
+  #profLevel { color: #ffb35c; font-size: 13px; margin-top: 8px; }
+  #profMeta { color: #8a84a8; font-size: 11px; margin-top: 6px; }
+  #profErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; }
   #emojiRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin: 10px 0 2px; }
   #emojiRow button { width: auto; margin: 0; background: none; border: 2px solid transparent; font-size: 20px; padding: 2px 4px; box-shadow: none; text-shadow: none; }
   #emojiRow button:hover { background: none; transform: none; box-shadow: none; }
@@ -75,12 +119,15 @@
     #chatSide { order: 1; min-height: 0; } /* แชทอยู่บน */
     #shop { order: 2; width: 100%; max-height: 112px; border-right: none; border-top: 3px solid #0a0713; border-bottom: none; flex-direction: row; } /* ร้านอยู่ล่าง */
     #shop h3 { display: none; }
+    #lantern { display: none; }
+    #counter { display: none; }
     #shopGrid { flex-direction: row; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; padding: 6px 8px; gap: 10px; }
     #floor { display: none; }
     #messages { min-height: 0; }
     .char img { width: 42px; height: 42px; }
-    /* panel GIF ให้ลอยเหนือ (แถบพิมพ์ + ร้าน) แทนที่จะทับ */
+    /* panel GIF/เสียง ให้ลอยเหนือ (แถบพิมพ์ + ร้าน) แทนที่จะทับ */
     #gifPanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
+    #voicePanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
     form { padding: 10px 8px; gap: 6px; }
     form button { padding: 10px 12px; }
   }
@@ -88,8 +135,10 @@
 </head>
 <body>
 <aside id="shop">
-  <h3>🛍️ ร้านตัวละคร</h3>
+  <div id="lantern"><i></i></div>
+  <h3>🍜 ร้านราเมง</h3>
   <div id="shopGrid"><div class="empty">กำลังโหลด...</div></div>
+  <div id="counter"></div>
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
@@ -98,6 +147,7 @@
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
   <label id="imgBtn" title="ส่งรูป">📷<input id="file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden /></label>
+  <button type="button" id="voiceBtn" title="อัดเสียง (สูงสุด 10 วิ — ลบหลัง 5 นาที)">🎤</button>
   <button type="button" id="gifBtn" title="ค้นหา GIF จาก Giphy">GIF</button>
   <button type="submit">ส่ง</button>
 </form>
@@ -107,22 +157,49 @@
   <input id="gifSearch" type="text" placeholder="ค้นหา GIF... (Giphy)" autocomplete="off" />
   <div id="gifGrid"><div class="empty">พิมพ์คำค้นเพื่อค้นหา GIF</div></div>
 </div>
+<div id="voicePanel">
+  <b>🎙️ ทบทวนเสียง <span id="voiceDur"></span></b>
+  <audio id="voicePreview" controls preload="metadata"></audio>
+  <div id="voicePanelBtns">
+    <button type="button" id="voiceSend">ส่ง</button>
+    <button type="button" id="voiceCancel">ยกเลิก</button>
+  </div>
+</div>
 <div id="nameModal">
   <div class="modal">
     <button id="modalClose" title="ปิด">✕</button>
-    <h3>ตั้งชื่อก่อนเข้าแชท</h3>
-    <input id="modalName" placeholder="ชื่อเล่นของคุณ" maxlength="50" autocomplete="off" />
+    <h3>🍜 เข้าร้านราเมง</h3>
+    <div id="gsiBox"></div>
+    <div id="gsiStatus"></div>
+    <input id="modalName" placeholder="ชื่อเล่นของคุณ (ไม่ใช่ชื่อจริง)" maxlength="50" autocomplete="off" />
     <div id="emojiRow" title="เลือกตัวละคร"></div>
     <button id="modalGo">เข้าแชท</button>
+    <button id="logoutBtn" style="display:none">ออกจากระบบ</button>
     <div id="modalErr"></div>
+  </div>
+</div>
+<div id="profileModal">
+  <div class="modal prof">
+    <button id="profClose" title="ปิด">✕</button>
+    <img id="profAvatar" alt="avatar" />
+    <div id="profName"></div>
+    <div id="profStatus"></div>
+    <div id="profLevel"></div>
+    <div id="profMeta"></div>
+    <button id="profEdit" style="display:none">เปลี่ยนชื่อ/อวตาร</button>
+    <div id="profErr"></div>
   </div>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
   const textInput = $("text"), list = $("messages"), form = $("form"), nameBtn = $("nameBtn");
 
-  // ชื่อของเรา (จำจากครั้งก่อนใน localStorage)
+  // ชื่อของเรา (จำจากครั้งก่อนใน localStorage) — เป็นชื่อเล่น ไม่ใช่ชื่อจริง
   let myName = localStorage.getItem("chatname") || "";
+  // session จาก Google login (server ออกให้หลังตรวจสอบ ID token แล้ว) — จำไว้ กันต้อง login ซ้ำทุก F5
+  let mySession = localStorage.getItem("chatsession") || "";
+  // Google OAuth Client ID — server ใส่ให้อัตโนมัติตอนเสิร์ฟหน้า (env GOOGLE_CLIENT_ID)
+  const GOOGLE_CLIENT_ID = "__GOOGLE_CLIENT_ID__";
   const updateNameBtn = () => (nameBtn.textContent = myName ? `👤 ${myName}` : "👤 ตั้งชื่อ");
 
   // ---- ตัวละคร (อีโมจิ) — สี pixel art ตามตัวที่เลือก ----
@@ -183,14 +260,85 @@
     return out.toDataURL();
   }
 
-  // ---- จองชื่อ (กันชื่อซ้ำ): modal จะขึ้นเมื่อยังไม่มีชื่อ หรือชื่อถูกคนอื่นใช้อยู่ ----
-  const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose");
+  // ---- Google login (บังคับ) + จองชื่อ (กันชื่อซ้ำ) ----
+  const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose"), gsiBox = $("gsiBox"), gsiStatus = $("gsiStatus"), logoutBtn = $("logoutBtn");
+  // ชื่อเล่นเริ่มต้นแบบสุ่ม (ไร้ตัวตน — ไม่เอาชื่อจริงมาโชว์ในแชท)
+  const defaultName = () => "ราเมง" + (1000 + Math.floor(Math.random() * 9000));
+  let gsiInited = false;
+  const setLoginUI = () => {
+    const logged = !!mySession;
+    gsiBox.style.display = logged || !GOOGLE_CLIENT_ID ? "none" : "block";
+    gsiStatus.textContent = logged
+      ? "✓ เข้าสู่ระบบด้วย Google แล้ว — ตั้งชื่อเล่นได้เลย"
+      : GOOGLE_CLIENT_ID
+        ? "เข้าสู่ระบบด้วย Google ก่อน (แชทใช้ชื่อเล่น ไม่เปิดเผยตัวตน)"
+        : "⚠️ ผู้ดูแลยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID — ดู วิธีใช้.md";
+    // ยังไม่ login = ยังไม่ต้องใส่ชื่อ/เลือกตัวละคร — จะโผล่ให้เฉพาะหลัง login สำเร็จ
+    modalName.style.display = logged ? "block" : "none";
+    emojiRow.style.display = logged ? "flex" : "none";
+    modalGo.style.display = logged ? "block" : "none";
+    logoutBtn.style.display = logged ? "block" : "none";
+    if (logged) modalName.focus();
+  };
+  // ปุ่ม "เข้าสู่ระบบด้วย Google" (สคริปต์ Google โหลดแบบ async — รอให้พร้อมก่อน init)
+  function initGoogle() {
+    if (gsiInited || !window.google || !google.accounts || !GOOGLE_CLIENT_ID) return;
+    gsiInited = true;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      locale: "th",
+      cancel_on_tap_outside: false,
+      callback: async (resp) => {
+        const res = await fetch("/google-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: resp.credential }),
+        });
+        if (res.status === 403) {
+          mySession = "";
+          localStorage.removeItem("chatsession");
+          gsiStatus.textContent = "⛔ บัญชีนี้ถูกแบนแล้ว";
+          return;
+        }
+        if (!res.ok) return (gsiStatus.textContent = "เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง");
+        const d = await res.json();
+        mySession = d.token;
+        localStorage.setItem("chatsession", mySession);
+        if (d.nickname) {
+          // มีชื่อเล่นของบัญชีนี้อยู่แล้ว (จำไว้หลังบ้าน) → เข้าแชทต่อได้เลย ไม่ต้องตั้งใหม่
+          const err = await claimName(d.nickname);
+          if (!err) return enterChat(d.nickname);
+          modalName.value = d.nickname; // ชื่อโดนคนอื่นเอาไปแล้ว → มีชื่อเดิมให้ ตั้งใหม่ได้เลย
+        } else {
+          // เมลนี้ยังไม่เคยตั้งชื่อ — ใช้ชื่อสุ่มใหม่เสมอ (ไม่เอา myName ค้างจากเมลก่อนหน้า)
+          modalName.value = defaultName();
+        }
+        setLoginUI();
+      },
+    });
+    google.accounts.id.renderButton(gsiBox, { theme: "filled_black", shape: "pill", text: "continue_with", locale: "th" });
+  }
+  if (window.google) initGoogle();
+  window.addEventListener("load", () => !gsiInited && initGoogle());
+  setTimeout(() => !gsiInited && initGoogle(), 1500); // เผื่อสคริปต์ Google โหลดช้า
+  // ออกจากระบบ — ล้าง session + ชื่อ/อวตารที่ค้างใน browser ด้วย (กันชื่อเมลก่อนหน้ารั่วไปเมลใหม่)
+  // ชื่อของแต่ละบัญชีจะถูกจำไว้ฝั่ง server (identities.json) — login กลับมาเมลเดิมได้ชื่อเดิมเอง
+  logoutBtn.addEventListener("click", () => {
+    mySession = "";
+    myName = "";
+    localStorage.removeItem("chatsession");
+    localStorage.removeItem("chatname");
+    localStorage.removeItem("chatavatar");
+    updateNameBtn();
+    setLoginUI();
+    modalName.focus();
+  });
   const showModal = (err) => {
     modalErr.textContent = err || "";
     // ยังไม่มีชื่อ (เข้ารอบแรก) = ปิดไม่ได้ ต้องตั้งชื่อก่อน
     modalClose.style.display = myName ? "block" : "none";
     modal.style.display = "flex";
-    modalName.focus();
+    setLoginUI();
   };
   const closeModal = () => {
     if (!myName) return; // รอบแรกห้ามปิด
@@ -204,22 +352,34 @@
     const res = await fetch("/claim", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: n, avatar: myAvatar }),
+      body: JSON.stringify({ name: n, avatar: myAvatar, session: mySession }),
     });
+    if (res.status === 401 || res.status === 403) {
+      // session หมดอายุ/server restart → ต้อง login ใหม่ / ถูกแบน → ล้าง session
+      mySession = "";
+      localStorage.removeItem("chatsession");
+      setLoginUI();
+      return res.status === 403 ? "บัญชีนี้ถูกแบนแล้ว" : "กรุณาเข้าสู่ระบบด้วย Google อีกครั้ง";
+    }
     if (!res.ok) return (await res.json()).error || "ชื่อนี้ใช้ไม่ได้";
     return null; // สำเร็จ
   }
-  const enter = async () => {
-    const n = modalName.value.trim();
-    if (!n) return;
-    const err = await claimName(n);
-    if (err) return (modalErr.textContent = err);
+  // เข้าแชทสำเร็จ — เซฟชื่อ/อวตาร + ปิด modal
+  const enterChat = (n) => {
     myName = n;
     localStorage.setItem("chatname", n);
     localStorage.setItem("chatavatar", myAvatar);
     updateNameBtn();
     closeModal();
     textInput.focus();
+  };
+  const enter = async () => {
+    if (!mySession) return (modalErr.textContent = "ต้องเข้าสู่ระบบด้วย Google ก่อน");
+    const n = modalName.value.trim();
+    if (!n) return;
+    const err = await claimName(n);
+    if (err) return (modalErr.textContent = err);
+    enterChat(n);
   };
   modalGo.addEventListener("click", enter);
   modalName.addEventListener("keydown", (e) => e.key === "Enter" && enter());
@@ -229,10 +389,11 @@
     showModal("");
   });
   updateNameBtn();
-  if (myName) {
-    // มีชื่อเก่าอยู่แล้ว → ลองจองใหม่ ถ้าซ้ำค่อยขึ้น modal ให้เปลี่ยนชื่อ
+  if (myName && mySession) {
+    // มีชื่อเก่า + session อยู่แล้ว → ลองจองคืน ถ้า session ตาย/ชื่อซ้ำค่อยขึ้น modal
     claimName(myName).then((err) => err && showModal(err));
   } else {
+    modalName.value = myName || defaultName();
     showModal("");
   }
 
@@ -247,6 +408,10 @@
     if (msg.img) {
       // คลิกรูป = เปิดดูเต็มจอใน tab ใหม่
       html += `<a href="${esc(msg.img)}" target="_blank"><img src="${esc(msg.img)}" alt="รูป"></a>`;
+    }
+    if (msg.voice) {
+      // ข้อความเสียง — เล่นได้ทันที (ลบอัตโนมัติหลัง 5 นาที)
+      html += `<audio controls preload="metadata" src="${esc(msg.voice)}"></audio>`;
     }
     if (msg.text) html += ` ${esc(msg.text)}`;
     html += `<span class="time">${fmt(msg.time)}</span>`;
@@ -333,20 +498,79 @@
     } catch { /* เสียงพังไม่เป็นไร */ }
   }
 
-  // ---- ร้านตัวละคร: โชว์คนที่อยู่ในห้องเป็น pixel art (poll ทุก 2 วิ) ----
+  // ---- ร้านตัวละคร: โชว์คนที่อยู่ในห้องเป็น pixel art + คะแนน/เลเวล (poll ทุก 2 วิ) ----
   const shopGrid = $("shopGrid");
+  let lastLevel = localStorage.getItem("chatlevel") || null;
   async function pollUsers() {
     try {
       const r = await fetch("/users");
       const { users } = await r.json();
       shopGrid.innerHTML = users.map((u) => {
         const mine = u.name === myName ? " me" : "";
-        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="char-name">${esc(u.name)}</div></div>`;
-      }).join("") || '<div class="empty">ยังไม่มีใครในร้าน</div>';
+        const lvl = u.title ? `${u.icon} ${esc(u.title)} · ${u.points}` : "";
+        // แถบความคืบหน้า + "อีก X แต้มถึงเลเวลหน้า" — เห็นความคืบหน้าแล้วอยากอยู่ต่อ
+        const bar = u.pct !== undefined ? `<div class="char-prog"><i style="width:${u.pct}%"></i></div>` : "";
+        // โควต้าวันนี้เต็ม → บอกแทนการนับแต้ม (กันสับสนว่าทำไมไม่ขึ้น)
+        const capped = u.dayCap && u.dayPoints >= u.dayCap;
+        const nxt = capped ? `<div class="char-next">วันนี้ได้ครบแต้มแล้ว 🛑</div>`
+          : u.toNext > 0 ? `<div class="char-next">อีก ${u.toNext} → ${u.nextIcon} ${esc(u.nextTitle)}</div>`
+          : (u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "");
+        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="bowl"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+      }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
+      // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
+      const me = users.find((u) => u.name === myName);
+      if (me && me.title) {
+        if (lastLevel && lastLevel !== me.title) toast(`⬆️ เลเวลอัพ! ${me.icon} ${me.title}`);
+        lastLevel = me.title;
+        localStorage.setItem("chatlevel", me.title);
+      }
     } catch { /* ข้ามรอบ */ }
   }
   pollUsers();
   setInterval(pollUsers, 2000);
+
+  // ---- หน้าโปรไฟล์: กดตัวละครในร้าน / ชื่อในแชท → ดูโปรไฟล์สาธารณะ ----
+  const profileModal = $("profileModal"), profAvatar = $("profAvatar"), profName = $("profName"), profStatus = $("profStatus"), profLevel = $("profLevel"), profMeta = $("profMeta"), profEdit = $("profEdit"), profErr = $("profErr");
+  async function openProfile(name) {
+    profErr.textContent = "";
+    profileModal.style.display = "flex";
+    profName.textContent = name;
+    profStatus.textContent = "กำลังโหลด...";
+    profEdit.style.display = "none"; // ซ่อนไว้ก่อนเสมอ — จะโชว์เฉพาะโปรไฟล์ตัวเองเท่านั้น
+    try {
+      const r = await fetch("/profile?name=" + encodeURIComponent(name));
+      const d = await r.json();
+      if (!r.ok) { profErr.textContent = d.error || "ไม่พบผู้ใช้"; profStatus.textContent = ""; return; }
+      profAvatar.src = pixelSprite(d.avatar);
+      profName.textContent = d.name;
+      profStatus.textContent = d.online ? "🟢 ออนไลน์" : "⚪ ออฟไลน์";
+      profStatus.style.color = d.online ? "#7ee08a" : "#8a84a8";
+      profLevel.textContent = `${d.icon} ${d.level}`;
+      const dt = (ms) => new Date(ms).toLocaleDateString("th-TH");
+      profMeta.textContent = `เข้าร่วมร้าน ${dt(d.joined)} · ออนไลน์ล่าสุด ${dt(d.lastSeen)}`;
+      // ปุ่มเปลี่ยนชื่อ/อวตาร — เฉพาะตอนดูโปรไฟล์ตัวเอง
+      profEdit.style.display = d.name === myName ? "block" : "none";
+    } catch {
+      profErr.textContent = "โหลดโปรไฟล์ไม่สำเร็จ";
+    }
+  }
+  $("profClose").addEventListener("click", () => (profileModal.style.display = "none"));
+  profileModal.addEventListener("click", (e) => e.target === profileModal && (profileModal.style.display = "none"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && profileModal.style.display === "flex") profileModal.style.display = "none"; });
+  profEdit.addEventListener("click", () => {
+    profileModal.style.display = "none";
+    nameBtn.click(); // เปิด modal ตั้งชื่อ/อวตารเดิม
+  });
+  // กดตัวละครในร้าน = ดูโปรไฟล์
+  shopGrid.addEventListener("click", (e) => {
+    const ch = e.target.closest(".char");
+    if (ch) openProfile(ch.querySelector(".char-name").textContent);
+  });
+  // กดชื่อในข้อความ = ดูโปรไฟล์
+  list.addEventListener("click", (e) => {
+    const nm = e.target.closest(".name");
+    if (nm) openProfile(nm.textContent);
+  });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -356,7 +580,7 @@
     const res = await fetch("/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, text }),
+      body: JSON.stringify({ name, text, session: mySession }),
     });
     if (!res.ok) return toast((await res.json()).error || "ส่งไม่สำเร็จ");
     textInput.value = "";
@@ -421,7 +645,7 @@
       const res = await fetch("/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, ext: "gif", img: base64 }),
+        body: JSON.stringify({ name, ext: "gif", img: base64, session: mySession }),
       });
       if (!res.ok) return toast((await res.json()).error || "ส่ง GIF ไม่สำเร็จ");
       toast("ส่ง GIF แล้ว");
@@ -434,6 +658,95 @@
     if (!gifPanel.contains(e.target) && e.target.id !== "gifBtn") gifPanel.style.display = "none";
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") gifPanel.style.display = "none"; });
+
+  // ---- อัดเสียง (MediaRecorder — ไม่พึ่ง library) สูงสุด 10 วิ — อัดเสร็จฟังก่อน ค่อยส่ง/ยกเลิก ----
+  const MAX_VOICE_MS = 10_000;
+  const voiceBtn = $("voiceBtn"), voicePanel = $("voicePanel"), voicePreview = $("voicePreview"), voiceDur = $("voiceDur"), voiceSend = $("voiceSend"), voiceCancel = $("voiceCancel");
+  let recorder = null, recChunks = [], recStart = 0, recTimer = null, pending = null; // pending = {blob, ext, url}
+  const fmtVoiceDur = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const resetRec = () => {
+    clearInterval(recTimer);
+    recTimer = null;
+    recorder = null;
+    voiceBtn.textContent = "🎤";
+    voiceBtn.classList.remove("rec");
+  };
+  // ปิดหน้าทบทวน + คืน memory (ไม่ส่ง)
+  const cancelPending = () => {
+    if (pending) {
+      URL.revokeObjectURL(pending.url);
+      pending = null;
+    }
+    voicePanel.style.display = "none";
+    voicePreview.pause();
+    voicePreview.removeAttribute("src");
+    voicePreview.load();
+  };
+  async function uploadVoice(blob, ext) {
+    const base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(",")[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+    const res = await fetch("/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: myName, ext, img: base64, session: mySession, kind: "voice" }),
+    });
+    if (!res.ok) return toast((await res.json()).error || "ส่งเสียงไม่สำเร็จ");
+    toast("ส่งเสียงแล้ว (จะลบหลัง 5 นาที)");
+  }
+  voiceSend.addEventListener("click", async () => {
+    if (!pending) return;
+    const p = pending;
+    cancelPending();
+    await uploadVoice(p.blob, p.ext);
+  });
+  voiceCancel.addEventListener("click", cancelPending);
+  voiceBtn.addEventListener("click", async () => {
+    if (!myName) return toast("ใส่ชื่อก่อนอัดเสียง");
+    if (pending) cancelPending(); // มีของค้าง (ยังไม่ส่ง) → ทิ้งแล้วเริ่มใหม่
+    // กำลังอัดอยู่ → กดซ้ำ = หยุด แล้วขึ้นหน้าทบทวน
+    if (recorder && recorder.state === "recording") return recorder.stop();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // เลือก format ที่ browser รองรับ: Safari = mp4, Chrome/Firefox = webm
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recChunks = [];
+      recorder.ondataavailable = (e) => e.data && e.data.size && recChunks.push(e.data);
+      recorder.onstop = () => {
+        const type = recorder.mimeType || "";
+        const ext = type.includes("mp4") ? "m4a" : "webm";
+        const blob = new Blob(recChunks, { type });
+        stream.getTracks().forEach((t) => t.stop());
+        resetRec();
+        // อัดเสร็จ → ขึ้นหน้าทบทวน ฟังก่อนได้ จะส่งหรือยกเลิก
+        pending = { blob, ext, url: URL.createObjectURL(blob) };
+        voicePreview.src = pending.url;
+        voiceDur.textContent = fmtVoiceDur(Math.max(1, Math.round((Date.now() - recStart) / 1000)));
+        voicePanel.style.display = "block";
+      };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        resetRec();
+        toast("อัดเสียงไม่สำเร็จ");
+      };
+      recorder.start();
+      recStart = Date.now();
+      voiceBtn.textContent = "🔴 0:00";
+      voiceBtn.classList.add("rec");
+      recTimer = setInterval(() => {
+        const s = Math.min(10, Math.floor((Date.now() - recStart) / 1000));
+        voiceBtn.textContent = `🔴 ${fmtVoiceDur(s)}`;
+        if (Date.now() - recStart >= MAX_VOICE_MS) recorder.stop(); // ครบ 10 วิ = หยุด แล้วให้กดส่ง/ฟังก่อน
+      }, 250);
+    } catch {
+      toast("ไม่อนุญาตไมโครโฟน — เปิดสิทธิ์ไมโครโฟนก่อน");
+    }
+  });
 
   // ส่งรูป: อ่านเป็น base64 แล้ว POST /upload (รูปจะถูกลบอัตโนมัติหลัง 5 นาที)
   $("file").addEventListener("change", async (e) => {
@@ -452,7 +765,7 @@
       const res = await fetch("/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, ext, img: base64 }),
+        body: JSON.stringify({ name, ext, img: base64, session: mySession }),
       });
       if (!res.ok) return toast((await res.json()).error || "ส่งรูปไม่สำเร็จ");
       toast("ส่งรูปแล้ว (จะถูกลบหลัง 5 นาที)");

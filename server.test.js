@@ -1,0 +1,391 @@
+// เทสต์ Google login (บังคับ) — ใช้ JWKS ปลอมในเครื่อง + RSA key จริงที่เราสร้างเอง
+// รัน: node --test server.test.js
+"use strict";
+
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
+const http = require("node:http");
+const path = require("node:path");
+const os = require("node:os");
+const fs = require("node:fs");
+
+const CLIENT_ID = "test-client.apps.googleusercontent.com";
+const ADMIN_TOKEN = "secret-admin-token";
+
+// สร้าง RSA key + JWKS server ปลอม ก่อน require server.js (server.js อ่าน env ตอนโหลด)
+const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+const pubJwk = publicKey.export({ format: "jwk" });
+
+const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+// สร้าง ID token (JWT RS256) เลียนแบบ Google
+function makeJwt(claims, { kid = "testkid", alg = "RS256", sign = true } = {}) {
+  const h = b64u({ alg, kid, typ: "JWT" });
+  const p = b64u(claims);
+  const data = h + "." + p;
+  if (!sign) return data + ".deadbeef";
+  const sig = crypto.sign("RSA-SHA256", Buffer.from(data), privateKey).toString("base64url");
+  return data + "." + sig;
+}
+const validClaims = (over = {}) => ({
+  iss: "https://accounts.google.com",
+  aud: CLIENT_ID,
+  sub: "gid-123",
+  email: "user@example.com",
+  name: "สมชาย ใจดี",
+  email_verified: true,
+  iat: Math.floor(Date.now() / 1000) - 60,
+  exp: Math.floor(Date.now() / 1000) + 3600,
+  ...over,
+});
+
+let base = "";
+let api; // exports จาก server.js
+
+test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA จริง)", async (t) => {
+  const identitiesFile = path.join(os.tmpdir(), `ramen-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  const banFile = path.join(os.tmpdir(), `ramen-ban-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+
+  const jwksSrv = http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ keys: [{ kty: "RSA", kid: "testkid", use: "sig", alg: "RS256", n: pubJwk.n, e: pubJwk.e }] }));
+  });
+  await new Promise((r) => jwksSrv.listen(0, "127.0.0.1", r));
+  const jwksUrl = `http://127.0.0.1:${jwksSrv.address().port}/certs`;
+
+  process.env.GOOGLE_CLIENT_ID = CLIENT_ID;
+  process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+  process.env.GOOGLE_JWKS_URL = jwksUrl;
+  process.env.IDENTITIES_FILE = identitiesFile;
+  process.env.BANNED_FILE = banFile;
+  process.env.POINT_COOLDOWN_MS = "300"; // เทสต์เร็วๆ — cooldown สั้น
+  process.env.DAILY_POINT_CAP = "6"; // เทสต์โควต้า
+  process.env.PORT = "0";
+
+  api = require("./server.js");
+  await new Promise((r) => api.server.listen(0, r));
+  base = `http://127.0.0.1:${api.server.address().port}`;
+
+  await t.test("levelFor: ระดับตามคะแนน (เกณฑ์สูง — ไต่ช้าๆ)", () => {
+    assert.equal(api.levelFor(0).title, "นักชิมมือใหม่");
+    assert.equal(api.levelFor(299).title, "นักชิมมือใหม่");
+    assert.equal(api.levelFor(300).title, "นักกินประจำ");
+    assert.equal(api.levelFor(899).title, "นักกินประจำ");
+    assert.equal(api.levelFor(900).title, "นักชิมตัวจริง");
+    assert.equal(api.levelFor(2100).title, "เชฟฝึกหัด");
+    assert.equal(api.levelFor(4500).title, "เซียนราเมง");
+    assert.equal(api.levelFor(9000).title, "ปรมาจารย์ราเมง");
+    assert.equal(api.levelFor(99999).title, "ปรมาจารย์ราเมง");
+  });
+
+  const post = (p, body, headers = {}) =>
+    fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  const get = (p, headers = {}) => fetch(base + p, { headers });
+
+  t.after(async () => {
+    // closeAllConnections: ปิด keep-alive จาก fetch ไม่งั้น server.close() ค้างรอไม่จบ
+    await new Promise((r) => { api.server.closeAllConnections(); api.server.close(r); });
+    await new Promise((r) => { jwksSrv.closeAllConnections(); jwksSrv.close(r); });
+    try { fs.rmSync(identitiesFile, { force: true }); } catch {}
+    try { fs.rmSync(banFile, { force: true }); } catch {}
+  });
+
+  // ── verifyGoogleJwt ──
+  await t.test("verify: token ที่ถูกต้องผ่าน", async () => {
+    const r = await api.verifyGoogleJwt(makeJwt(validClaims()), { clientId: CLIENT_ID, jwksUrl });
+    assert.equal(r.ok, true);
+    assert.equal(r.sub, "gid-123");
+    assert.equal(r.email, "user@example.com");
+  });
+
+  await t.test("verify: aud ไม่ตรงโดน reject", async () => {
+    const r = await api.verifyGoogleJwt(makeJwt(validClaims({ aud: "other-client" })), { clientId: CLIENT_ID, jwksUrl });
+    assert.match(r.error, /client id/);
+  });
+
+  await t.test("verify: ลายเซ็นปลอมโดน reject", async () => {
+    const r = await api.verifyGoogleJwt(makeJwt(validClaims(), { sign: false }), { clientId: CLIENT_ID, jwksUrl });
+    assert.match(r.error, /ลายเซ็น/);
+  });
+
+  await t.test("verify: token หมดอายุโดน reject", async () => {
+    const r = await api.verifyGoogleJwt(makeJwt(validClaims({ exp: Math.floor(Date.now() / 1000) - 600 })), { clientId: CLIENT_ID, jwksUrl });
+    assert.match(r.error, /หมดอายุ/);
+  });
+
+  await t.test("verify: issuer ปลอมโดน reject", async () => {
+    const r = await api.verifyGoogleJwt(makeJwt(validClaims({ iss: "https://evil.example.com" })), { clientId: CLIENT_ID, jwksUrl });
+    assert.match(r.error, /issuer/);
+  });
+
+  // ── /google-login ──
+  let sessionA, sessionB;
+  await t.test("google-login: token ดี → ได้ session + เก็บ identity หลังบ้าน", async () => {
+    const res = await post("/google-login", { credential: makeJwt(validClaims()) });
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.ok(d.token);
+    sessionA = d.token;
+    // identities.json ถูกเขียน (หลังบ้าน)
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    assert.equal(saved[0].email, "user@example.com");
+    assert.equal(saved[0].name, "สมชาย ใจดี");
+  });
+
+  await t.test("google-login: token ปลอม → 401", async () => {
+    const res = await post("/google-login", { credential: "not-a-real-jwt" });
+    assert.equal(res.status, 401);
+  });
+
+  // ── /claim (บังคับ login) ──
+  await t.test("claim: ไม่มี session → 401", async () => {
+    const res = await post("/claim", { name: "ราเมง1234", avatar: "🦊" });
+    assert.equal(res.status, 401);
+  });
+
+  await t.test("claim: มี session → จองชื่อได้ (ชื่อเล่นไม่ใช่ชื่อจริง)", async () => {
+    const res = await post("/claim", { name: "ราเมง1234", avatar: "🦊", session: sessionA });
+    assert.equal(res.status, 200);
+    const d = await (await res.json());
+    assert.equal(d.ok, true);
+  });
+
+  await t.test("claim: คนอื่น (gid ต่าง) แย่งชื่อไม่ได้ → 409", async () => {
+    const res2 = await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) });
+    sessionB = (await res2.json()).token;
+    const res = await post("/claim", { name: "ราเมง1234", avatar: "🐸", session: sessionB });
+    assert.equal(res.status, 409);
+  });
+
+  await t.test("claim: เจ้าของเดิม (gid ตรง) ขอคืนได้ (จำลอง F5)", async () => {
+    const res = await post("/claim", { name: "ราเมง1234", avatar: "🦊", session: sessionA });
+    assert.equal(res.status, 200);
+  });
+
+  await t.test("nickname: จำชื่อเล่นไว้กับบัญชี — login รอบ 2 ได้ชื่อเดิมคืน ไม่ต้องตั้งใหม่", async () => {
+    // login ใหม่ด้วยบัญชีเดิม (gid-123) → ต้องได้ nickname "ราเมง1234" กลับมา
+    const res = await post("/google-login", { credential: makeJwt(validClaims()) });
+    assert.equal(res.status, 200);
+    const d = await res.json();
+    assert.equal(d.nickname, "ราเมง1234");
+    // identities.json เก็บ nickname ไว้กับ sub ด้วย
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const me = saved.find((i) => i.sub === "gid-123");
+    assert.equal(me.nickname, "ราเมง1234");
+  });
+
+  // ── /users ไม่รั่วข้อมูลส่วนตัว ──
+  await t.test("users: สาธารณะเห็นแค่ชื่อเล่น+อวตาร ไม่มี email/ชื่อจริง", async () => {
+    const res = await get("/users");
+    const { users } = await res.json();
+    const u = users.find((x) => x.name === "ราเมง1234");
+    assert.ok(u);
+    assert.equal(u.email, undefined);
+    assert.equal(u.realName, undefined);
+    assert.equal(u.gid, undefined);
+  });
+
+  // ── /send ต้องมี session ──
+  await t.test("send: ไม่มี session → 401 / มี session → 200 + ได้ +2 แต้ม", async () => {
+    const bad = await post("/send", { name: "ราเมง1234", text: "hi" });
+    assert.equal(bad.status, 401);
+    const ok = await post("/send", { name: "ราเมง1234", text: "hi", session: sessionA });
+    assert.equal(ok.status, 200);
+    // ส่งข้อความ = +2 แต้ม → /users โชว์คะแนน + เลเวล (ยังเป็นมือใหม่) + ความคืบหน้า
+    const { users } = await (await get("/users")).json();
+    const me = users.find((u) => u.name === "ราเมง1234");
+    assert.equal(me.points, 2);
+    assert.equal(me.title, "นักชิมมือใหม่");
+    assert.equal(me.nextTitle, "นักกินประจำ");
+    assert.equal(me.toNext, 298); // ต้องอีก 298 แต้ม (300-2)
+    assert.equal(me.pct, 1); // แถบความคืบหน้า ~1%
+    // คะแนนเก็บถาวรใน identities.json
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    assert.equal(saved.find((i) => i.sub === "gid-123").points, 2);
+  });
+
+  await t.test("profile: โปรไฟล์สาธารณะ — มีเลเวล/สถิติ แต่ไม่มี email/ชื่อจริง", async () => {
+    const r = await get("/profile?name=" + encodeURIComponent("ราเมง1234"));
+    assert.equal(r.status, 200);
+    const d = await r.json();
+    assert.equal(d.name, "ราเมง1234");
+    assert.equal(d.online, true);
+    assert.equal(d.avatar, "🦊");
+    assert.equal(d.points, 2);
+    assert.equal(d.level, "นักชิมมือใหม่");
+    assert.equal(d.stats.msgs, 1); // นับสถิติข้อความ
+    assert.equal(d.email, undefined); // ห้ามรั่ว
+    assert.equal(d.realName, undefined); // ห้ามรั่ว
+    assert.equal(d.sub, undefined); // ห้ามรั่ว
+    // ไม่พบผู้ใช้ → 404
+    assert.equal((await get("/profile?name=" + encodeURIComponent("ไม่มีตัวตน"))).status, 404);
+  });
+
+  // ── /admin/users ──
+  await t.test("admin: ไม่มี/ผิด token → 401, ถูก token → เห็น email+ชื่อจริง", async () => {
+    const no = await get("/admin/users");
+    assert.equal(no.status, 401);
+    const bad = await get("/admin/users", { Authorization: "Bearer wrong" });
+    assert.equal(bad.status, 401);
+    const ok = await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    assert.equal(ok.status, 200);
+    const d = await ok.json();
+    const online = d.online.find((x) => x.name === "ราเมง1234");
+    assert.equal(online.email, "user@example.com");
+    assert.equal(online.realName, "สมชาย ใจดี");
+    assert.ok(d.identities.some((i) => i.email === "other@example.com"), "มี identity ของคนที่เคย login ด้วย");
+    // summary: stats + ข้อความล่าสุด (ส่งไป 1 ข้อความ "hi" ในเทสต์ send)
+    assert.equal(d.stats.messages, 1);
+    assert.equal(d.latest.length, 1);
+    assert.equal(d.latest[0].name, "ราเมง1234");
+    assert.equal(d.latest[0].text, "hi");
+  });
+
+  // ── ข้อความเสียง (kind=voice) ──
+  await t.test("voice: อัปโหลดเสียง → ข้อความ voice + เสิร์ฟ mime audio + ext เสียงต้องมี kind=voice", async () => {
+    await new Promise((r) => setTimeout(r, 320)); // รอพ้น cooldown ของการส่งข้อความก่อน
+    const res = await post("/upload", { name: "ราเมง1234", ext: "webm", img: Buffer.from("fake-audio").toString("base64"), session: sessionA, kind: "voice" });
+    assert.equal(res.status, 200);
+    const { messages } = await (await get("/messages")).json();
+    const v = messages.find((m) => m.voice);
+    assert.ok(v, "มีข้อความ voice");
+    assert.equal(v.img, undefined);
+    assert.equal(v.text, "");
+    // เสิร์ฟไฟล์เสียงด้วย content-type ที่ถูกต้อง
+    const f = await get(v.voice);
+    assert.equal(f.status, 200);
+    assert.match(f.headers.get("content-type"), /audio\/webm/);
+    // อัปโหลด ext เสียงโดยไม่ระบุ kind=voice → 400 (กันเอาเสียงปลอมมาเป็นรูป)
+    const bad = await post("/upload", { name: "ราเมง1234", ext: "webm", img: "eA==", session: sessionA });
+    assert.equal(bad.status, 400);
+    // ส่งเสียง = +3 แต้ม (รวมกับข้อความ 2 = 5)
+    const { users } = await (await get("/users")).json();
+    assert.equal(users.find((u) => u.name === "ราเมง1234").points, 5);
+  });
+
+  // ── กันฟาร์มคะแนน: cooldown + โควต้าต่อวัน ──
+  await t.test("คะแนน: cooldown กันสแปม + โควต้าวันละ 6 แต้ม (เทสต์ env)", async () => {
+    const pts = async () => (await (await get("/users")).json()).users.find((u) => u.name === "ราเมง999")?.points;
+    // ส่งข้อความ 1 → ได้ +2
+    assert.equal((await post("/send", { name: "ราเมง999", text: "หนึ่ง", session: sessionB })).status, 200);
+    assert.equal(await pts(), 2);
+    // ส่งซ้ำทันที (ใน cooldown) → ข้อความขึ้น แต่ไม่ให้คะแนน
+    const r2 = await post("/send", { name: "ราเมง999", text: "สอง", session: sessionB });
+    assert.equal(r2.status, 200);
+    assert.equal((await r2.json()).rewarded, false);
+    assert.equal(await pts(), 2);
+    let msgs = (await (await get("/messages")).json()).messages;
+    assert.ok(msgs.some((m) => m.text === "สอง"), "ข้อความสแปมยังส่งได้ แต่ไม่ให้คะแนน");
+    // รอพ้น cooldown → ได้คะแนนอีก
+    await new Promise((r) => setTimeout(r, 320));
+    assert.equal((await post("/send", { name: "ราเมง999", text: "สาม", session: sessionB })).status, 200);
+    assert.equal(await pts(), 4);
+    // ถึงโควต้า 6 (อีก 2 แต้ม)
+    await new Promise((r) => setTimeout(r, 320));
+    assert.equal((await post("/send", { name: "ราเมง999", text: "สี่", session: sessionB })).status, 200);
+    assert.equal(await pts(), 6);
+    // ส่งต่อ → แต้มนิ่ง (โควต้าเต็ม) แต่ข้อความยังขึ้น
+    await new Promise((r) => setTimeout(r, 320));
+    const rCap = await post("/send", { name: "ราเมง999", text: "ห้า", session: sessionB });
+    const capJ = await rCap.json();
+    assert.equal(capJ.rewarded, false);
+    assert.equal(capJ.dayLeft, 0);
+    assert.equal(await pts(), 6);
+    // /users คืน dayPoints/dayCap
+    const u = (await (await get("/users")).json()).users.find((x) => x.name === "ราเมง999");
+    assert.equal(u.dayPoints, 6);
+    assert.equal(u.dayCap, 6);
+  });
+
+  // ── Ban / Unban (blocklist ด้วย sub ของ Google) ──
+  await t.test("ban: ต้องใช้ token, แบนแล้ว login ไม่ได้ + เตะ session, ปลดแบนกลับมาได้", async () => {
+    // ไม่มี token → 401
+    assert.equal((await post("/admin/ban", { sub: "gid-123" })).status, 401);
+
+    // แบน gid-123 (พร้อมเหตุผล)
+    const ban = await post("/admin/ban", { sub: "gid-123", reason: "สแปม" }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    assert.equal(ban.status, 200);
+    assert.ok((await ban.json()).banned.some((b) => b.sub === "gid-123" && b.reason === "สแปม"));
+
+    // session เดิมโดนเตะ → claim ไม่ผ่าน (401 เพราะ session ถูกลบ)
+    assert.equal((await post("/claim", { name: "ราเมง1234", avatar: "🦊", session: sessionA })).status, 401);
+
+    // session ที่ฝังเอง (จำลองกรณี session ยังไม่โดนลบ) → 403 จากการเช็ค banned
+    api.sessions.set("injected", { sub: "gid-123", email: "user@example.com", name: "สมชาย ใจดี" });
+    assert.equal((await post("/claim", { name: "ราเมง1234", avatar: "🦊", session: "injected" })).status, 403);
+
+    // login ใหม่ → 403 ถูกแบน
+    assert.equal((await post("/google-login", { credential: makeJwt(validClaims()) })).status, 403);
+
+    // banned.json ถูกเขียน + ขึ้นใน /admin/users
+    const au = await (await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` })).json();
+    assert.ok(au.banned.some((b) => b.sub === "gid-123"));
+    assert.ok(fs.existsSync(banFile));
+
+    // ปลดแบน → login ได้อีก
+    assert.equal((await post("/admin/unban", { sub: "gid-123" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 200);
+    assert.equal((await post("/google-login", { credential: makeJwt(validClaims()) })).status, 200);
+  });
+
+  // ── ประวัติเปลี่ยนชื่อ (10 อันล่าสุด) — ผู้ดูแลเท่านั้น ──
+  await t.test("nickHistory: เก็บ 10 อันล่าสุด — admin เห็น, ผู้ใช้ทั่วไป/โปรไฟล์ไม่เห็น", async () => {
+    // login ใหม่ (หลังปลดแบน) → session ใหม่
+    const lg = await post("/google-login", { credential: makeJwt(validClaims()) });
+    assert.equal(lg.status, 200);
+    const sess = (await lg.json()).token;
+
+    // ตั้งชื่อแรก + เปลี่ยนชื่ออีก 11 ครั้ง = 12 ครั้ง → เหลือแค่ 10 อันล่าสุด
+    for (let i = 1; i <= 12; i++) {
+      const r = await post("/claim", { name: "ประวัติ" + i, avatar: "🦊", session: sess });
+      assert.equal(r.status, 200);
+    }
+
+    // identities.json เก็บ nickHistory 10 อันล่าสุด (ใหม่สุดก่อน)
+    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const me = saved.find((i) => i.sub === "gid-123");
+    assert.equal(me.nickname, "ประวัติ12");
+    assert.equal(me.nickHistory.length, 10);
+    assert.equal(me.nickHistory[0].from, "ประวัติ11");
+    assert.equal(me.nickHistory[0].name, "ประวัติ12");
+    assert.equal(me.nickHistory[9].from, "ประวัติ2"); // อันที่ 11 เก่าโดนตัด
+    assert.equal(me.nickHistory[9].name, "ประวัติ3");
+
+    // ผู้ดูแลเห็นผ่าน /admin/users
+    const au = await (await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` })).json();
+    const adm = au.identities.find((i) => i.sub === "gid-123");
+    assert.equal(adm.nickHistory.length, 10);
+
+    // ผู้ใช้ทั่วไป (ร้าน/โปรไฟล์) ไม่เห็น nickHistory
+    const pub = (await (await get("/users")).json()).users.find((u) => u.name === "ประวัติ12");
+    assert.equal(pub.nickHistory, undefined);
+    const prof = await (await get("/profile?name=" + encodeURIComponent("ประวัติ12"))).json();
+    assert.equal(prof.nickHistory, undefined);
+  });
+
+  // ── ชื่อที่เพิ่งถูกเปลี่ยนทิ้ง (กันแย่งชื่อ) ──
+  await t.test("retiredName: คนอื่นแย่งชื่อที่เพิ่งเปลี่ยนทิ้งไม่ได้ (24 ชม.), เจ้าของเดิมขอคืนได้, พ้นเวลาแล้วจองได้", async () => {
+    // gid-123 เปลี่ยนจาก "ประวัติ12" → "ลุงราเมง" → "ประวัติ12" โดนทิ้ง (retired)
+    const lg = await post("/google-login", { credential: makeJwt(validClaims()) });
+    const sess = (await lg.json()).token;
+    assert.equal((await post("/claim", { name: "ลุงราเมง", avatar: "🦊", session: sess })).status, 200);
+    assert.ok(api.retiredNames.has("ประวัติ12"), "ชื่อเก่าโดนเก็บเข้ารายการกันแย่ง");
+
+    // จำลอง TTL 60 วิผ่าน (ชื่อหลุดจาก activeNames แล้ว) — เหลือแค่กันแย่ง 24 ชม. คุ้มครอง
+    api.activeNames.delete("ประวัติ12");
+
+    // คนอื่น (gid-999) แย่งไม่ได้ → 409 (กันแย่ง)
+    const lg2 = await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) });
+    const sessB2 = (await lg2.json()).token;
+    const steal = await post("/claim", { name: "ประวัติ12", avatar: "🐸", session: sessB2 });
+    assert.equal(steal.status, 409);
+    assert.match((await steal.json()).error, /เพิ่งถูกเปลี่ยนทิ้ง/);
+
+    // เจ้าของเดิม (gid-123) ขอคืนได้ทันที → 200
+    assert.equal((await post("/claim", { name: "ประวัติ12", avatar: "🦊", session: sess })).status, 200);
+
+    // จำลองผ่านทั้ง 60 วิ + 24 ชม. → ชื่อว่างจริง → คนอื่นจองได้
+    api.activeNames.delete("ประวัติ12");
+    api.retiredNames.delete("ประวัติ12");
+    assert.equal((await post("/claim", { name: "ประวัติ12", avatar: "🐸", session: sessB2 })).status, 200);
+  });
+});

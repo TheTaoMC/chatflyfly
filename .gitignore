@@ -4,6 +4,12 @@ node_modules/
 # รูปชั่วคราว — ล้างทุก restart
 uploads/
 
+# ข้อมูลส่วนตัวผู้ใช้ (email/ชื่อจริง) หลังบ้าน — ห้ามขึ้น GitHub
+identities.json
+
+# blocklist ผู้ใช้ (sub + เหตุผล) — ห้ามขึ้น GitHub
+banned.json
+
 # tunnel / deploy binaries (โหลดใหม่ได้จากเว็บผู้ผลิต)
 cloudflared.exe
 flyctl.exe
@@ -20,3 +26,6 @@ flyctl.zip
 # ไฟล์ส่วนตัว/เครื่องมือ
 knowledge.md
 .freebuff/
+
+# config ส่วนตัว (GOOGLE_CLIENT_ID, ADMIN_TOKEN) — ห้ามขึ้น GitHub
+.env.local
