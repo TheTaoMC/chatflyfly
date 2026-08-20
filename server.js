@@ -115,27 +115,20 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
 <h2>คนที่ออนไลน์อยู่ (ชื่อเล่น → ตัวตนจริง)</h2><table id="t1"></table>
 <h2>ทุกคนที่เคยเข้าสู่ระบบ (เก็บหลังบ้าน)</h2><table id="t2"></table>
 <h2>Blocklist (โดนแบนแล้ว — login ไม่ได้)</h2><table id="t3"></table>
-<h2>🛠 สตูดิโอวาดชุด (วาดชิ้นส่วนอวตาร 16×16)</h2>
-<p>วาดเสร็จ → ตั้งชื่อ/ราคา → บันทึก (ใช้ ADMIN_TOKEN จากช่องบนสุด) — ตั้งราคา = ขึ้นร้านค้าให้ผู้ใช้ซื้อด้วยหัวใจ</p>
+<h2>🛠 สตูดิโออวATAR (อัปโหลด PNG)</h2>
+<p>วาดชิ้นส่วนเป็น PNG → เลือกชั้น → ตั้งชื่อ/ราคา → บันทึก — ตั้งราคา = ขึ้นร้านค้าให้ผู้ใช้ซื้อด้วยหัวใจ</p>
 <div class="srow">
   <select id="sType"><option value="b">🍜 ชาม</option><option value="c">👕 ตัว</option><option value="h">🙂 หัว</option><option value="f">😊 หน้า</option><option value="o">🎩 หมวก</option></select>
   <input id="sName" placeholder="ชื่อชิ้นส่วน" maxlength="30">
   <input id="sPrice" type="number" min="0" max="1000" placeholder="ราคา 💗 (0=ฟรี)">
 </div>
-<div id="sTools">
-  <button type="button" id="sToolA" class="on">🎨 สี A</button>
-  <button type="button" id="sToolB">🎨 สี B</button>
-  <button type="button" id="sToolE">🧽 ลบ</button>
-  <button type="button" id="sClear">🗑 ล้าง</button>
+<div style="margin:10px 0">
+  <input type="file" id="sFile" accept="image/png,image/jpeg,image/webp" style="color:#e8e6f0">
 </div>
-<div id="sPalette"></div>
-<div class="studioBody">
-  <div id="sGrid"></div>
-  <div id="studioPreview"></div>
-</div>
+<div id="sPreview" style="margin:10px 0"></div>
 <button id="sSave">💾 บันทึกชิ้นส่วน</button>
 <div id="sErr"></div>
-<h2>🧩 ชิ้นส่วนวาดเอง (ทั้งหมด)</h2>
+<h2>🧩 ชิ้นส่วนทั้งหมด</h2>
 <div id="partsList"></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -201,46 +194,28 @@ const SMAPS={
   chef:[".....OOOOOO.....","....OOOOOOOO....","....OOOOOOOO....","....OOOOOOOO...."],
 };
 const SCOLS={b:'#5b7fa6',c:'#e8e6f0',h:'#3a2a20',f:'#3a2a20',o:'#ffffff'};
-function renderPreview(map,a,b,type){
-  const cv=document.createElement('canvas');cv.width=16;cv.height=16;
-  const ctx=cv.getContext('2d');
-  const d=(m,cols,off)=>m.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch!=='.'){ctx.fillStyle=cols[ch]||'#fff';ctx.fillRect(x,off+y,1,1);}}));
-  if(type==='b')d(map,{A:a,B:b},13);else d(SMAPS.bowl,{B:shade(SCOLS.b,0.95),D:shade(SCOLS.b,0.6)},13);
-  if(type==='h')d(map,{A:a,B:b},0);else d(SMAPS.head,{H:shade(SCOLS.h,0.65),F:'#f2c9a0'},0);
-  if(type==='c')d(map,{A:a,B:b},8);else d(SMAPS.body,{C:SCOLS.c},8);
-  if(type==='f')d(map,{A:a,B:b},6);else d(SMAPS.face,{E:SCOLS.f,M:'#7a4a30'},6);
-  if(type==='o')d(map,{A:a,B:b},0);else d(SMAPS.chef,{O:SCOLS.o},0);
-  const out=document.createElement('canvas');out.width=112;out.height=112;
-  const o=out.getContext('2d');o.imageSmoothingEnabled=false;o.drawImage(cv,0,0,112,112);
-  return out.toDataURL();
-}
-const SPALETTE=['#3a2a20','#e67e22','#e9c93c','#5aa7e8','#b48ce0','#5cb85c','#d94f4f','#f5a3c0','#ffffff','#4a4a4a','#f2c9a0','#a9714b','#7a4a30','#e74c3c'];
-let sCells=[],sTool='A',sColorA='#3a2a20',sColorB='#f2c9a0';
-function sSetTool(t){sTool=t;renderStudio();}
-function sPickColor(c){if(sTool==='A')sColorA=c;else if(sTool==='B')sColorB=c;renderStudio();}
-function sPaint(x,y){sCells[y][x]=sTool==='E'?'.':sTool;renderStudio();}
-function renderStudio(){
-  document.getElementById('sToolA').className=sTool==='A'?'on':'';
-  document.getElementById('sToolB').className=sTool==='B'?'on':'';
-  document.getElementById('sToolE').className=sTool==='E'?'on':'';
-  const pal=document.getElementById('sPalette');pal.innerHTML='';
-  SPALETTE.forEach(c=>{const b=document.createElement('button');b.type='button';b.className=(c===(sTool==='B'?sColorB:sColorA))?(sTool==='B'?'onB':'onA'):'';b.style.background=c;b.addEventListener('click',()=>sPickColor(c));pal.appendChild(b);});
-  document.getElementById('sGrid').innerHTML=sCells.flatMap((row,y)=>row.map((ch,x)=>'<button type="button" style="'+(ch!=='.'?'background:'+(ch==='A'?sColorA:sColorB):'')+'" onclick="sPaint('+x+','+y+')"></button>')).join('');
-  const type=document.getElementById('sType').value;
-  document.getElementById('studioPreview').innerHTML='<img src="'+renderPreview(sCells.map(r=>r.join('')),sColorA,sColorB,type)+'" alt="พรีวิว">';
-}
+document.getElementById('sFile').addEventListener('change',(e)=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>{
+    document.getElementById('sPreview').innerHTML='<img src="'+r.result+'" style="width:128px;height:128px;image-rendering:pixelated;border:2px solid #5a4a3a">';
+  };r.readAsDataURL(f);
+});
 async function sSave(){
   const type=document.getElementById('sType').value,name=document.getElementById('sName').value.trim();
   const price=Math.max(0,Math.round(Number(document.getElementById('sPrice').value)||0));
   const err=document.getElementById('sErr');
+  const file=document.getElementById('sFile').files[0];
   if(!name)return err.textContent='ใส่ชื่อชิ้นส่วนก่อน';
+  if(!file)return err.textContent='เลือกรูป PNG ก่อน';
   if(!tok())return err.textContent='ต้องใส่ ADMIN_TOKEN ก่อน';
-  const r=await fetch('/parts',{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify({type,name,colorA:sColorA,colorB:sColorB,map:sCells.map(r=>r.join('')),price})});
+  const fd=new FormData();
+  fd.append('type',type);fd.append('name',name);fd.append('price',price);fd.append('img',file);
+  const r=await fetch('/parts',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
   const d=await r.json();
   if(!r.ok)return err.textContent='❌ '+(d.error||'fail');
   err.textContent='✅ บันทึกแล้ว id='+d.id+(price?' — ขึ้นร้านค้าแล้ว 🛒':' — ทุกคนใช้ฟรี');
-  sCells=Array.from({length:16},()=>Array(16).fill('.'));
-  renderStudio();
+  document.getElementById('sFile').value='';
+  document.getElementById('sPreview').innerHTML='';
   refreshParts();
 }
 async function refreshParts(){
@@ -260,16 +235,37 @@ async function delPart(id){
   if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
   refreshParts();
 }
-document.getElementById('sType').addEventListener('change',renderStudio);
-document.getElementById('sToolA').addEventListener('click',()=>sSetTool('A'));
-document.getElementById('sToolB').addEventListener('click',()=>sSetTool('B'));
-document.getElementById('sToolE').addEventListener('click',()=>sSetTool('E'));
-document.getElementById('sClear').addEventListener('click',()=>{sCells=Array.from({length:16},()=>Array(16).fill('.'));renderStudio();});
 document.getElementById('sSave').addEventListener('click',sSave);
-sCells=Array.from({length:16},()=>Array(16).fill('.'));
-renderStudio();
 refreshParts();
 </script></body></html>`;
+
+// ---- multipart/form-data parser (ไม่พึ่ง dependency) ----
+function parseMultipart(buf, boundary) {
+  const result = {};
+  const sep = Buffer.from("--" + boundary);
+  let pos = 0;
+  while (true) {
+    const start = buf.indexOf(sep, pos);
+    if (start === -1) break;
+    const next = buf.indexOf(sep, start + sep.length);
+    const part = buf.slice(start + sep.length, next === -1 ? buf.length : next);
+    const headerEnd = part.indexOf("\r\n\r\n");
+    if (headerEnd === -1) { pos = next === -1 ? buf.length : next; continue; }
+    const headers = part.slice(0, headerEnd).toString();
+    const body = part.slice(headerEnd + 4, part.length - 2); // strip trailing \r\n
+    const nameMatch = headers.match(/name="([^"]+)"/);
+    const filenameMatch = headers.match(/filename="([^"]+)"/);
+    if (nameMatch) {
+      if (filenameMatch) {
+        result[nameMatch[1]] = { data: body, filename: filenameMatch[1] };
+      } else {
+        result[nameMatch[1]] = body.toString();
+      }
+    }
+    pos = next === -1 ? buf.length : next;
+  }
+  return result;
+}
 
 // ---- state ----
 const messages = []; // [{id, name, text?, img?, time}]
@@ -480,6 +476,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // เสิร์ฟ avatar PNG files (/avatars/bowl/b1.png, /avatars/body/c1.png, ...)
+  if (method === "GET" && url.pathname.startsWith("/avatars/")) {
+    const parts = url.pathname.split("/");
+    if (parts.length !== 4) { res.writeHead(404); res.end("not found"); return; }
+    const layer = parts[2];
+    const file = path.basename(parts[3]);
+    const validLayers = ["bowl", "body", "head", "face", "hat"];
+    if (!validLayers.includes(layer) || !/^[a-z]\d+\.png$/.test(file)) {
+      res.writeHead(404); res.end("not found"); return;
+    }
+    fs.readFile(path.join(__dirname, "avatars", layer, file), (err, data) => {
+      if (err) { res.writeHead(404); res.end("not found"); return; }
+      res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" });
+      res.end(data);
+    });
+    return;
+  }
+
   // ดึงข้อความทั้งหมด (client poll ทุก 1.5 วิ) — ส่ง ?name=xxx มาด้วยเพื่อเป็น heartbeat ยืนยันว่ายังอยู่
   if (method === "GET" && url.pathname === "/messages") {
     touch(url.searchParams.get("name"));
@@ -615,41 +629,37 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, { parts: customParts });
     return;
   }
-  // วาดชิ้นส่วนใหม่ (ผู้ดูแล) — เก็บ parts.json + ถ้าตั้งราคา → ขึ้นร้านค้าด้วย
+  // อัปโหลดชิ้นส่วนใหม่ (ผู้ดูแล) — รับ PNG via FormData → เก็บไฟล์ + parts.json
   if (method === "POST" && url.pathname === "/parts") {
     if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
       json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
       return;
     }
-    let body = "";
-    for await (const chunk of req) body += chunk;
-    let data;
-    try {
-      data = JSON.parse(body);
-    } catch {
-      json(res, 400, { error: "invalid json" });
-      return;
-    }
-    const type = String(data.type || "").trim();
-    if (!"bc hfo".includes(type) || type.length !== 1) { json(res, 400, { error: "type ต้องเป็น b/c/h/f/o" }); return; }
-    const name = String(data.name || "").trim().slice(0, 30);
+    // parse multipart/form-data manually
+    const boundary = req.headers["content-type"]?.match(/boundary=(.+)/)?.[1];
+    if (!boundary) { json(res, 400, { error: "missing multipart boundary" }); return; }
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const buf = Buffer.concat(chunks);
+    const parts = parseMultipart(buf, boundary);
+    const type = String(parts.type || "").trim();
+    if (!"bchof".includes(type) || type.length !== 1) { json(res, 400, { error: "type ต้องเป็น b/c/h/f/o" }); return; }
+    const name = String(parts.name || "").trim().slice(0, 30);
     if (!name) { json(res, 400, { error: "name required" }); return; }
-    const hex = (c) => /^#[0-9a-fA-F]{6}$/.test(c);
-    const colorA = String(data.colorA || "").trim();
-    const colorB = String(data.colorB || "").trim();
-    if (!hex(colorA) || !hex(colorB)) { json(res, 400, { error: "colorA/colorB ต้องเป็น #rrggbb" }); return; }
-    const map = Array.isArray(data.map) ? data.map : [];
-    if (map.length !== 16 || map.some((r) => typeof r !== "string" || r.length !== 16 || /[^AB.]/.test(r))) {
-      json(res, 400, { error: "map ต้องเป็น 16 แถว × 16 ช่อง (ใช้ . A B เท่านั้น)" });
-      return;
-    }
-    const price = Math.max(0, Math.min(1000, Math.round(Number(data.price) || 0)));
-    // id ถัดไปของ type นี้ (ชนกับชุดฟรี + ของเดิมไม่ได้)
+    const price = Math.max(0, Math.min(1000, Math.round(Number(parts.price) || 0)));
+    if (!parts.img || !parts.img.data) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG" }); return; }
+    // id ถัดไปของ type นี้
     const used = new Set((TYPE_IDS[type] || []).map((n) => type + n));
     customParts.forEach((p) => p.type === type && used.add(p.id));
     let n = type === "o" ? 5 : 1;
     while (used.has(type + n)) n++;
-    const part = { id: type + n, type, name, colorA, colorB, map, price };
+    const id = type + n;
+    // บันทึกรูป PNG ลง avatars/<layer>/<id>.png
+    const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[type];
+    const dir = path.join(__dirname, "avatars", layerDir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, id + ".png"), parts.img.data);
+    const part = { id, type, name, price, png: "/avatars/" + layerDir + "/" + id + ".png" };
     customParts.push(part);
     saveParts();
     json(res, 200, { ok: true, id: part.id });

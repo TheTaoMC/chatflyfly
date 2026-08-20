@@ -83,7 +83,7 @@
   #voicePanelBtns button { flex: 1; }
   #voiceSend { background: #17322a; border-color: #0f5a45; }
   #toast { position: fixed; top: 16px; right: 16px; background: #2a1d4d; color: #ffcc00; border: 2px solid #0a0713; box-shadow: 3px 3px 0 #000; padding: 10px 14px; display: none; z-index: 6; }
-  #nameModal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #nameModal, #dressModal, #profileModal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 10; }
   .modal { position: relative; background: #1e1630; border: 3px solid #ffcc00; box-shadow: 8px 8px 0 rgba(0,0,0,.7); padding: 24px; width: 300px; text-align: center; }
   #modalClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
   #modalClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
@@ -109,6 +109,8 @@
   #profErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; }
   #modalAvatarRow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
   #modalAvatar { width: 72px; height: 72px; image-rendering: pixelated; }
+  .avatar-stack { position: relative; display: inline-block; width: var(--av-size, 96px); height: var(--av-size, 96px); }
+  .avatar-stack img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; image-rendering: pixelated; }
   #modalDress { margin: 0; width: auto; }
   .modal.dress { width: 300px; }
   #dressPreview { width: 128px; height: 128px; image-rendering: pixelated; display: block; margin: 0 auto 4px; }
@@ -192,7 +194,7 @@
     <div id="gsiStatus"></div>
     <input id="modalName" placeholder="ชื่อเล่นของคุณ (ไม่ใช่ชื่อจริง)" maxlength="50" autocomplete="off" />
     <div id="modalAvatarRow" style="display:none">
-      <img id="modalAvatar" alt="avatar" />
+      <div id="modalAvatar"></div>
       <button type="button" id="modalDress">🎨 แต่งตัว</button>
     </div>
     <button id="modalGo">เข้าแชท</button>
@@ -203,7 +205,7 @@
 <div id="profileModal">
   <div class="modal prof">
     <button id="profClose" title="ปิด">✕</button>
-    <img id="profAvatar" alt="avatar" />
+    <div id="profAvatar"></div>
     <div id="profName"></div>
     <div id="profStatus"></div>
     <div id="profLevel"></div>
@@ -218,7 +220,7 @@
   <div class="modal dress">
     <button id="dressClose" title="ปิด">✕</button>
     <h3>🎨 แต่งตัว + ร้านค้า</h3>
-    <img id="dressPreview" alt="ชุด" />
+    <div id="dressPreview"></div>
     <div id="dressHearts">💗 หัวใจ 0</div>
     <div id="dressTabs"></div>
     <div id="dressGrid"></div>
@@ -312,42 +314,35 @@
   const parseToken = (t) => { const m = TOKEN_RE.exec(t); return m ? { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] } : { b: 1, c: 1, h: 1, f: 1, o: 0 }; };
   const tokenOf = (t) => `b${t.b}c${t.c}h${t.h}f${t.f}o${t.o}`;
   const bowlColor = (avatar) => { const m = TOKEN_RE.exec(avatar); return m ? PARTS.b.vars[+m[1]].c : "#d9c08f"; };
-  // เรนเดอร์ sprite 16×16 ขยาย size เท่า (withBowl=true = วาดชามในภาพ ใช้พรีวิวแต่งตัว)
-  function renderSprite(avatar, size = 96, withBowl = false) {
-    const m = TOKEN_RE.exec(avatar);
-    const cv = document.createElement("canvas");
-    cv.width = 16; cv.height = 16;
-    const ctx = cv.getContext("2d");
-    const v = (p, id) => PARTS[p].vars[id] || PARTS[p].vars[1];
-    const draw = (map, cols, off, cell = 1) => map.forEach((row, y) => [...row].forEach((ch, x) => {
-      if (ch !== ".") { ctx.fillStyle = cols[ch] || "#fff"; ctx.fillRect(x * cell, (off + y) * cell, cell, cell); }
-    }));
-    const part = (p, id) => CUSTOM_PARTS[p + id] || null; // ชิ้นส่วนวาดเอง (มี map ของตัวเอง)
-    if (m) {
-      const t = { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] };
-      const bp = part("b", t.b);
-      if (withBowl) draw(bp ? bp.map : MAPS.bowl, bp ? { A: bp.colorA, B: bp.colorB } : { B: shade(v("b", t.b).c, 0.95), D: shade(v("b", t.b).c, 0.6) }, 13);
-      const hp = part("h", t.h);
-      draw(hp ? hp.map : MAPS.head, hp ? { A: hp.colorA, B: hp.colorB } : { H: shade(v("h", t.h).c, 0.65), F: "#f2c9a0" }, 0);
-      const cp = part("c", t.c);
-      draw(cp ? cp.map : MAPS.body, cp ? { A: cp.colorA, B: cp.colorB } : { C: v("c", t.c).c }, 8);
-      const fp = part("f", t.f);
-      draw(fp ? fp.map : MAPS.face, fp ? { A: fp.colorA, B: fp.colorB } : { E: v("f", t.f).c, M: "#7a4a30" }, 6);
-      const op = part("o", t.o);
-      if (op) draw(op.map, { A: op.colorA, B: op.colorB }, 0);
-      else { const om = { 1: "chef", 2: "straw", 3: "band", 4: "gold" }[t.o]; if (om) draw(MAPS[om], { O: v("o", t.o).c }, om === "band" ? 4 : 0); }
-    } else {
-      const primary = EMOJI_COLORS[avatar] || "#607d8b";
-      draw(SPRITE, { H: shade(primary, 0.7), F: "#f2c9a0", E: "#3a2a20", C: primary, L: "#4a4a4a" }, 0, 2);
-    }
-    const out = document.createElement("canvas");
-    out.width = size; out.height = size;
-    const o = out.getContext("2d");
-    o.imageSmoothingEnabled = false;
-    o.drawImage(cv, 0, 0, size, size);
-    return out.toDataURL();
+  // ---- Avatar: PNG layers ซ้อนกัน 5 เลเยอร์ ไม่ต้องใช้ canvas ----
+  const TYPE_DIR = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" };
+  // คืน path ของ PNG file สำหรับชิ้นส่วนแต่ละชั้น (built-in หรือ custom)
+  function partPng(type, id) {
+    const key = type + id;
+    // ตรวจ custom parts ก่อน (มี .png field จากสตูดิโอ)
+    if (CUSTOM_PARTS[key] && CUSTOM_PARTS[key].png) return CUSTOM_PARTS[key].png;
+    // built-in
+    return `/avatars/${TYPE_DIR[type]}/${key}.png`;
   }
-  function pixelSprite(avatar) { return renderSprite(avatar, 96, false); }
+  // คืน HTML string ของ avatar แบบ 5 เลเยอร์ (ใช้ PNG files ใน /avatars/)
+  function avatarHtml(avatar, size) {
+    const m = TOKEN_RE.exec(avatar);
+    if (!m) {
+      // legacy emoji — แสดงเป็นตัวอักษร
+      const emoji = EMOJI_COLORS[avatar] ? avatar : "🍜";
+      return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
+    }
+    const t = { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] };
+    const layers = [];
+    for (const [type, id] of Object.entries(t)) {
+      if (type === "o" && id === 0) continue; // ไม่ใส่หมวก
+      layers.push(partPng(type, id));
+    }
+    return `<div class="avatar-stack" style="--av-size:${size}px">${layers.map((src) => `<img src="${src}" alt="">`).join("")}</div>`;
+  }
+  // backward compat
+  function pixelSprite(avatar) { return avatarHtml(avatar, 96); }
+  function renderSprite(avatar, size = 96) { return avatarHtml(avatar, size); }
 
   // ---- Google login (บังคับ) + จองชื่อ (กันชื่อซ้ำ) ----
   const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose"), gsiBox = $("gsiBox"), gsiStatus = $("gsiStatus"), logoutBtn = $("logoutBtn"), modalAvatarRow = $("modalAvatarRow"), modalAvatar = $("modalAvatar");
@@ -365,7 +360,8 @@
     // ยังไม่ login = ยังไม่ต้องใส่ชื่อ/เลือกตัวละคร — จะโผล่ให้เฉพาะหลัง login สำเร็จ
     modalName.style.display = logged ? "block" : "none";
     modalAvatarRow.style.display = logged ? "flex" : "none";
-    if (logged) modalAvatar.src = pixelSprite(myAvatar);
+    if (logged) modalAvatar.innerHTML = pixelSprite(myAvatar);
+
     modalGo.style.display = logged ? "block" : "none";
     logoutBtn.style.display = logged ? "block" : "none";
     if (logged) modalName.focus();
@@ -606,7 +602,7 @@
         const nxt = capped ? `<div class="char-next">วันนี้ได้ครบแต้มแล้ว 🛑</div>`
           : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "";
         const bc = bowlColor(u.avatar);
-        return `<div class="char${mine}"><img src="${pixelSprite(u.avatar)}" alt="${esc(u.name)}"><div class="bowl" style="--bc:${bc};--bd:${shade(bc, 0.75)}"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+        return `<div class="char${mine}">${pixelSprite(u.avatar)}<div class="bowl" style="--bc:${bc};--bd:${shade(bc, 0.75)}"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
       }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
       // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
       const me = users.find((u) => u.name === myName);
@@ -636,7 +632,7 @@
       const r = await fetch("/profile?name=" + encodeURIComponent(name) + (mySession ? "&session=" + encodeURIComponent(mySession) : ""));
       const d = await r.json();
       if (!r.ok) { profErr.textContent = d.error || "ไม่พบผู้ใช้"; profStatus.textContent = ""; return; }
-      profAvatar.src = pixelSprite(d.avatar);
+      profAvatar.innerHTML = pixelSprite(d.avatar);
       profName.textContent = d.name;
       profStatus.textContent = d.online ? "🟢 ออนไลน์" : "⚪ ออฟไลน์";
       profStatus.style.color = d.online ? "#7ee08a" : "#8a84a8";
@@ -700,7 +696,7 @@
   function setDressTab(k) { dressTab = k; renderDress(); }
   function dressSet(p, id) { const t = parseToken(dressToken); t[p] = id; dressToken = tokenOf(t); renderDress(); }
   function renderDress() {
-    dressPreview.src = renderSprite(dressToken, 128, true);
+    dressPreview.innerHTML = renderSprite(dressToken, 128);
     dressHearts.textContent = `💗 หัวใจ ${heartBalance}`;
     dressTabs.innerHTML = [
       ["b", "🍜 ชาม"], ["c", "👕 ตัว"], ["h", "🙂 หัว"], ["f", "😊 หน้า"], ["o", "🎩 หมวก"], ["shop", "🛒 ร้านค้า"],
@@ -716,7 +712,7 @@
       const tok = tokenOf(t);
       const own = ownedParts.includes(it.id) || !it.price; // ชิ้นส่วนฟรี = ใช้ได้ทุกคน
       return `<div class="dvar ${vid === curId ? "on" : ""} ${own ? "" : "locked"}" title="${own ? "" : "ต้องซื้อจากร้านค้าก่อน"}" ${own ? `onclick="dressSet('${p}',${vid})"` : ""}>
-        <img src="${renderSprite(tok, 64, true)}" alt="${esc(it.n)}"><span>${esc(it.n)}</span>${it.price ? `<b style="color:#ff6ec7">${it.price} 💗</b>` : ""}</div>`;
+        ${renderSprite(tok, 64)}<span>${esc(it.n)}</span>${it.price ? `<b style="color:#ff6ec7">${it.price} 💗</b>` : ""}</div>`;
     }).join("");
   }
   async function renderShop() {
@@ -729,7 +725,7 @@
       const own = ownedParts.includes(it.id);
       const t = parseToken(dressToken); t[it.id[0]] = +it.id.slice(1);
       return `<div class="dvar" title="${esc(it.desc || "")}">
-        <img src="${renderSprite(tokenOf(t), 64, true)}" alt="${esc(it.name)}">
+        ${renderSprite(tokenOf(t), 64)}
         <span>${esc(it.name)}</span><b style="color:#ff6ec7">${it.price} 💗</b>
         ${own ? "<i>มีแล้ว ✓</i>" : `<button onclick="buyPart('${it.id}')" ${heartBalance < it.price ? "disabled" : ""}>ซื้อ</button>`}
       </div>`;
@@ -749,7 +745,7 @@
       // ยังไม่เข้าแชท — แค่เซฟชุดไว้
       myAvatar = dressToken;
       localStorage.setItem("chatavatar", dressToken);
-      modalAvatar.src = pixelSprite(myAvatar);
+
       dressModal.style.display = "none";
       return;
     }

@@ -82,6 +82,31 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
 
   const post = (p, body, headers = {}) =>
     fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  // สร้าง PNG 16×16 ง่ายๆ (white square)
+  const makePng = () => {
+    const header = Buffer.from([137,80,78,71,13,10,26,10]);
+    const zlib = require("node:zlib");
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(16,0); ihdr.writeUInt32BE(16,4); ihdr[8]=8; ihdr[9]=6;
+    const makeChunk=(t,d)=>{const l=Buffer.alloc(4);l.writeUInt32BE(d.length,0);const tb=Buffer.from(t,"ascii");const crcT=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;crcT[n]=c;}const crc32=b=>{let c=0xffffffff;for(let i=0;i<b.length;i++)c=crcT[(c^b[i])&0xff]^(c>>>8);return(c^0xffffffff)>>>0;};const cb=Buffer.alloc(4);cb.writeUInt32BE(crc32(Buffer.concat([tb,d])),0);return Buffer.concat([l,tb,d,cb]);};
+    const raw=Buffer.alloc((16*4+1)*16); for(let y=0;y<16;y++){raw[y*(16*4+1)]=0;for(let x=0;x<16;x++){const i=y*(16*4+1)+1+x*4;raw[i]=255;raw[i+1]=255;raw[i+2]=255;raw[i+3]=255;}}
+    return Buffer.concat([header,makeChunk("IHDR",ihdr),makeChunk("IDAT",zlib.deflateSync(raw)),makeChunk("IEND",Buffer.alloc(0))]);
+  };
+  const postMultipart = (p, fields, headers = {}) => {
+    const boundary = "----TestBoundary" + Date.now();
+    const parts = [];
+    for (const [k, v] of Object.entries(fields)) {
+      if (Buffer.isBuffer(v)) {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"; filename="test.png"\r\nContent-Type: image/png\r\n\r\n`));
+        parts.push(v);
+        parts.push(Buffer.from("\r\n"));
+      } else {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
+      }
+    }
+    parts.push(Buffer.from(`--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+    return fetch(base + p, { method: "POST", headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, ...headers }, body });
+  };
   const get = (p, headers = {}) => fetch(base + p, { headers });
 
   t.after(async () => {
@@ -482,34 +507,35 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   });
 
   // ── สตูดิโอวาดชุด (admin วาดชิ้นส่วน 16×16 → parts.json + ร้านค้า) ──
-  await t.test("parts: admin บันทึกชิ้นส่วน, /parts คืน, ขึ้นร้านค้า, ซื้อได้", async () => {
-    const MAP16 = Array(16).fill("................");
-    MAP16[0] = "AAAA........AAAA";
+  await t.test("parts: admin อัปโหลด PNG, /parts คืน, ขึ้นร้านค้า, ซื้อได้", async () => {
+    const png = makePng();
     // ไม่มี token → 401
-    assert.equal((await post("/parts", { type: "b", name: "x", colorA: "#ff0000", colorB: "#00ff00", map: MAP16, price: 0 })).status, 401);
-    // map ไม่ถูกต้อง → 400
-    assert.equal((await post("/parts", { type: "b", name: "x", colorA: "#ff0000", colorB: "#00ff00", map: ["bad"], price: 0 }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 400);
-    // admin บันทึกสำเร็จ → id ถัดไปของ type b = b6
-    const save = await post("/parts", { type: "b", name: "ชามลายไทย", colorA: "#ff0000", colorB: "#00ff00", map: MAP16, price: 10 }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    assert.equal((await postMultipart("/parts", { type: "b", name: "x", price: "0", img: png })).status, 401);
+    // ไม่มีรูป → 400
+    assert.equal((await postMultipart("/parts", { type: "b", name: "x", price: "0" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 400);
+    // admin อัปโหลดสำเร็จ → id ถัดไปของ type b = b6
+    const save = await postMultipart("/parts", { type: "b", name: "ชามลายไทย", price: "10", img: png }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
     assert.equal(save.status, 200);
     const sid = (await save.json()).id;
     assert.equal(sid, "b6");
-    // /parts คืนชิ้นส่วน
+    // /parts คืนชิ้นส่วน (มี .png field)
     const parts = await (await get("/parts")).json();
-    assert.ok(parts.parts.some((p) => p.id === "b6" && p.name === "ชามลายไทย"));
+    assert.ok(parts.parts.some((p) => p.id === "b6" && p.name === "ชามลายไทย" && p.png));
     // ขึ้นร้านค้า (ตั้งราคาไว้ 10)
     const shop = await (await get("/shop")).json();
     assert.ok(shop.items.some((i) => i.id === "b6" && i.price === 10));
     // parts.json เขียนจริง
     assert.ok(JSON.parse(fs.readFileSync(partsFile, "utf8")).some((p) => p.id === "b6"));
+    // PNG ไฟล์อยู่จริง
+    assert.ok(fs.existsSync(path.join(__dirname, "avatars", "bowl", "b6.png")));
     // ผู้ใช้ซื้อ custom part ได้
     const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
     api.identities.get("gid-999").hearts = 20;
     const buy = await post("/shop/buy", { id: "b6", session: r2 });
     assert.equal(buy.status, 200);
     assert.ok((await buy.json()).owned.includes("b6"));
-    // เจอ id ซ้ำไม่ได้ (กันชน) — วาดอีกชิ้น type b → b7
-    const save2 = await post("/parts", { type: "b", name: "อีกชิ้น", colorA: "#111111", colorB: "#222222", map: MAP16, price: 0 }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    // เจอ id ซ้ำไม่ได้ (กันชน) — อัปโหลดอีกชิ้น type b → b7
+    const save2 = await postMultipart("/parts", { type: "b", name: "อีกชิ้น", price: "0", img: png }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
     assert.equal((await save2.json()).id, "b7");
     // ลบชิ้นส่วน (admin) → หายจาก /parts + ร้านค้า / ไม่มี token → 401
     assert.equal((await post("/parts/delete", { id: "b7" })).status, 401);
