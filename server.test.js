@@ -46,6 +46,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   const identitiesFile = path.join(os.tmpdir(), `ramen-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   const banFile = path.join(os.tmpdir(), `ramen-ban-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   const partsFile = path.join(os.tmpdir(), `ramen-parts-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  const avatarsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ramen-avatars-"));
 
   const jwksSrv = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -63,6 +64,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   process.env.DAILY_POINT_CAP = "6"; // เทสต์โควต้า
   process.env.PORT = "0";
   process.env.PARTS_FILE = partsFile;
+  process.env.AVATARS_DIR = avatarsDir;
 
   api = require("./server.js");
   await new Promise((r) => api.server.listen(0, r));
@@ -116,6 +118,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     try { fs.rmSync(identitiesFile, { force: true }); } catch {}
     try { fs.rmSync(banFile, { force: true }); } catch {}
     try { fs.rmSync(partsFile, { force: true }); } catch {}
+    try { fs.rmSync(avatarsDir, { recursive: true, force: true }); } catch {}
   });
 
   // ── verifyGoogleJwt ──
@@ -531,7 +534,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     // parts.json เขียนจริง
     assert.ok(JSON.parse(fs.readFileSync(partsFile, "utf8")).some((p) => p.id === "b6"));
     // PNG ไฟล์อยู่จริง
-    assert.ok(fs.existsSync(path.join(__dirname, "avatars", "bowl", "b6.png")));
+    assert.ok(fs.existsSync(path.join(avatarsDir, "bowl", "b6.png")));
     // ผู้ใช้ซื้อ custom part ได้
     const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
     api.identities.get("gid-999").hearts = 20;

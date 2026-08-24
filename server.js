@@ -70,6 +70,7 @@ const IDENTITIES_FILE = process.env.IDENTITIES_FILE || path.join(__dirname, "ide
 const BANNED_FILE = process.env.BANNED_FILE || path.join(__dirname, "banned.json"); // blocklist (sub ของ Google)
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
+const AVATARS_DIR = process.env.AVATARS_DIR || path.join(__dirname, "avatars");
 // ชิ้นส่วนอวตารที่วาดเอง (สตูดิโอ) — เก็บใน parts.json (committable → อยู่ข้าม deploy)
 const PARTS_FILE = process.env.PARTS_FILE || path.join(__dirname, "parts.json");
 let customParts = []; // [{id, type, name, colorA, colorB, map[], price}]
@@ -109,6 +110,13 @@ function hasExpectedFileSignature(buf, ext) {
   if (ext === "mp3") return buf.length >= 3 && (buf.subarray(0, 3).toString() === "ID3" || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0));
   if (ext === "m4a") return buf.length >= 12 && buf.subarray(4, 8).toString() === "ftyp";
   return false;
+}
+
+function publicPart(part) {
+  const layer = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[part.type];
+  let version = "";
+  try { version = Math.floor(fs.statSync(path.join(AVATARS_DIR, layer, `${part.id}.png`)).mtimeMs).toString(36); } catch { /* ไฟล์หาย = browser จะแสดง fallback */ }
+  return { ...part, version };
 }
 
 // หน้าเว็บผู้ดูแล — โชว์คนออนไลน์ + identity (email/ชื่อจริง) ที่เก็บหลังบ้าน
@@ -635,7 +643,7 @@ const server = http.createServer(async (req, res) => {
     if (!validLayers.includes(layer) || !/^[a-z]\d+\.png$/.test(file)) {
       res.writeHead(404); res.end("not found"); return;
     }
-    fs.readFile(path.join(__dirname, "avatars", layer, file), (err, data) => {
+    fs.readFile(path.join(AVATARS_DIR, layer, file), (err, data) => {
       if (err) { res.writeHead(404); res.end("not found"); return; }
       res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" });
       res.end(data);
@@ -894,7 +902,7 @@ const server = http.createServer(async (req, res) => {
 
   // ชิ้นส่วนที่วาดเอง (สตูดิโอ) — client ต้องรู้ map เพื่อเรนเดอร์อวตารของทุกคน
   if (method === "GET" && url.pathname === "/parts") {
-    json(res, 200, { parts: customParts });
+    json(res, 200, { parts: customParts.map(publicPart) });
     return;
   }
   // อัปโหลดชิ้นส่วนใหม่ (ผู้ดูแล) — รับ PNG via FormData → เก็บไฟล์ + parts.json
@@ -923,7 +931,7 @@ const server = http.createServer(async (req, res) => {
     const id = type + n;
     // บันทึกรูป PNG ลง avatars/<layer>/<id>.png
     const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[type];
-    const dir = path.join(__dirname, "avatars", layerDir);
+    const dir = path.join(AVATARS_DIR, layerDir);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, id + ".png"), parts.img.data);
     const part = { id, type, name, price, png: "/avatars/" + layerDir + "/" + id + ".png" };
@@ -954,7 +962,7 @@ const server = http.createServer(async (req, res) => {
     if (form.img?.data?.length) {
       if (!hasExpectedFileSignature(form.img.data, "png")) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG ที่ถูกต้อง" }); return; }
       const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[part.type];
-      fs.writeFileSync(path.join(__dirname, "avatars", layerDir, part.id + ".png"), form.img.data);
+      fs.writeFileSync(path.join(AVATARS_DIR, layerDir, part.id + ".png"), form.img.data);
     }
     saveParts();
     json(res, 200, { ok: true, id: part.id });

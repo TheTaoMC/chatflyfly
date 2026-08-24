@@ -369,11 +369,11 @@
     for (const type of ["c", "h", "f", "o"]) {
       const part = CUSTOM_PARTS[type + token[type]];
       // ใช้ URL เฉพาะของชิ้นส่วนนั้น เพื่อไม่ให้เบราว์เซอร์หยิบภาพเก่าจากแคช
-      if (part?.png) layers.push(`${part.png}?v=${encodeURIComponent(part.id)}`);
+      if (part?.png) layers.push(`${part.png}?v=${encodeURIComponent(part.version || part.id)}`);
     }
     const hasCustomBowl = Boolean(bowl?.png);
     const steam = hasCustomBowl ? '<i class="avatar-steam s1"></i><i class="avatar-steam s2"></i>' : "";
-    const bowlHtml = hasCustomBowl ? `<img class="avatar-bowl" src="${bowl.png}?v=${encodeURIComponent(bowl.id)}" alt="">` : "";
+    const bowlHtml = hasCustomBowl ? `<img class="avatar-bowl" src="${bowl.png}?v=${encodeURIComponent(bowl.version || bowl.id)}" alt="">` : "";
     return `<div class="avatar-stack" style="--av-width:${width}px;--av-height:${height}px">${bowlHtml}${steam}<img class="avatar-base" src="${BASE_AVATAR_URL}" alt="ตัวละคร">${layers.map((src) => `<img class="avatar-part" src="${src}" alt="">`).join("")}</div>`;
   }
   // backward compat
