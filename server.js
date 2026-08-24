@@ -174,7 +174,7 @@ table{border-collapse:separate;border-spacing:0;width:100%;margin-bottom:22px;ov
 <h2>🧩 ชิ้นส่วนทั้งหมด</h2>
 <div id="partsTabs"></div>
 <div id="partsList"></div>
-<script>
+<script nonce="__CSP_NONCE__">
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=ms=>ms?new Date(ms).toLocaleString('th-TH'):'-';
 const fmtT=ms=>new Date(ms).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
@@ -576,12 +576,13 @@ async function verifyGoogleJwt(token, opts = {}) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const method = req.method;
+  const cspNonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), geolocation=(), payment=()");
   res.setHeader("X-Frame-Options", "DENY");
   if (url.pathname === "/" || url.pathname === "/admin") {
-    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'");
+    res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
   }
 
   const isStatic = method === "GET" && (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/uploads/") || url.pathname.startsWith("/avatars/") || url.pathname === "/simple/body.png");
@@ -595,7 +596,7 @@ const server = http.createServer(async (req, res) => {
   // หน้า UI — ใส่ GOOGLE_CLIENT_ID ลงไปใน index.html ตอนเสิร์ฟ (ไม่ต้องแก้ไฟล์)
   if (method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(fs.readFileSync(path.join(__dirname, "index.html"), "utf8").replace("__GOOGLE_CLIENT_ID__", GOOGLE_CLIENT_ID));
+    res.end(fs.readFileSync(path.join(__dirname, "index.html"), "utf8").replace("__GOOGLE_CLIENT_ID__", GOOGLE_CLIENT_ID).replace("__CSP_NONCE__", cspNonce));
     return;
   }
 
@@ -1238,7 +1239,7 @@ const server = http.createServer(async (req, res) => {
   // หน้าเว็บผู้ดูแล (โหลดข้อมูลด้วย ADMIN_TOKEN)
   if (method === "GET" && url.pathname === "/admin") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(ADMIN_HTML);
+    res.end(ADMIN_HTML.replace("__CSP_NONCE__", cspNonce));
     return;
   }
 
