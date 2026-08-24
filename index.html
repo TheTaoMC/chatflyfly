@@ -813,7 +813,8 @@
   }
   function renderDress() {
     dressPreview.innerHTML = renderSprite(dressToken, 128);
-    dressTabs.innerHTML = DRESS_TABS.map(([type, label]) => `<button class="${type === dressTab ? "on" : ""}" onclick="dressTab='${type}';renderDress()">${label}</button>`).join("");
+    dressTabs.innerHTML = DRESS_TABS.map(([type, label]) => `<button class="${type === dressTab ? "on" : ""}" data-dress-tab="${type}">${label}</button>`).join("");
+    dressTabs.querySelectorAll("[data-dress-tab]").forEach((button) => button.addEventListener("click", () => { dressTab = button.dataset.dressTab; renderDress(); }));
     const items = Object.values(CUSTOM_PARTS).filter((part) => part.type === dressTab);
     if (!items.length) {
       dressGrid.innerHTML = '<span>ยังไม่มีชิ้นส่วนในหมวดนี้ — เพิ่มได้ที่หน้า /admin</span>';
@@ -824,10 +825,11 @@
       const owned = !part.price || ownedParts.includes(part.id);
       const previewToken = parseToken(dressToken);
       previewToken[dressTab] = Number(part.id.slice(1));
-      return `<div class="dvar ${currentId === previewToken[dressTab] ? "on" : ""}" ${owned ? `onclick="dressSet('${dressTab}',${previewToken[dressTab]})"` : ""} title="${owned ? "" : "ต้องซื้อชิ้นส่วนนี้ก่อน"}">
+      return `<div class="dvar ${currentId === previewToken[dressTab] ? "on" : ""}" ${owned ? `data-dress-part="${previewToken[dressTab]}"` : ""} title="${owned ? "" : "ต้องซื้อชิ้นส่วนนี้ก่อน"}">
         ${renderSprite(tokenOf(previewToken), 64)}<span>${esc(part.name)}</span>${part.price ? `<span>${part.price} 💗</span>` : ""}
       </div>`;
     }).join("");
+    dressGrid.querySelectorAll("[data-dress-part]").forEach((item) => item.addEventListener("click", () => dressSet(dressTab, Number(item.dataset.dressPart))));
   }
   dressSave.addEventListener("click", async () => {
     const res = await fetch("/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName, avatar: dressToken, session: mySession }) });

@@ -145,9 +145,9 @@ table{border-collapse:separate;border-spacing:0;width:100%;margin-bottom:22px;ov
 @media(max-width:760px){body{padding:18px 12px}h1{font-size:20px;padding:16px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.srow{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}body>p:nth-of-type(1),body>p:nth-of-type(2),body>p:nth-of-type(3){align-items:stretch}input,#q{width:100%;min-width:0}}
 </style></head><body>
 <h1>🍜 ศูนย์ควบคุมร้านราเมง</h1>
-<p>Admin token: <input id="tok" type="password" placeholder="ADMIN_TOKEN"> <button onclick="load()">โหลดข้อมูล</button></p>
+<p>Admin token: <input id="tok" type="password" placeholder="ADMIN_TOKEN"> <button id="loadBtn" type="button">โหลดข้อมูล</button></p>
 <p>เหตุผลการแบน: <input id="reason" placeholder="ไม่บังคับ"> (กดปุ่ม แบน ในตารางด้านล่าง)</p>
-<p>ค้นหา: <input id="q" placeholder="ชื่อเล่น / อีเมล / ชื่อจริง" oninput="render()"> (กรองทั้ง 3 ตาราง)</p>
+<p>ค้นหา: <input id="q" placeholder="ชื่อเล่น / อีเมล / ชื่อจริง"> (กรองทั้ง 3 ตาราง)</p>
 <div id="err" class="bad"></div>
 <div class="cards" id="cards"></div>
 <div id="latestBox"></div>
@@ -205,7 +205,7 @@ function render(){
   if(!DATA) return;
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   const hit=o=>!q||[o.nickname,o.name,o.realName,o.email,o.sub].some(v=>String(v||'').toLowerCase().includes(q))||(o.nickHistory||[]).some(x=>String(x.name||'').toLowerCase().includes(q));
-  const btn=(fn,args,label)=>'<button onclick="'+fn+'('+args.map(a=>"'" + esc(a) + "'").join(',')+')">'+label+'</button>';
+  const btn=(action,args,label)=>'<button type="button" data-admin-action="'+action+'" data-sub="'+esc(args[0])+'">'+label+'</button>';
   const cells=(o,cols)=>cols.map(c=>'<td>'+esc(o[c])+'</td>').join('');
   const hist=o=>{const h=o.nickHistory||[];if(!h.length)return '<td>—</td>';
     const lines=h.map(x=>(x.from?esc(x.from)+' → ':'ตั้งชื่อ ')+esc(x.name)+' ('+fmt(x.at)+')');
@@ -219,6 +219,7 @@ function render(){
   document.getElementById('t1').innerHTML='<tr><th>ชื่อเล่น</th><th>อวตาร</th><th>ชื่อจริง</th><th>อีเมล</th><th>ออนไลน์ล่าสุด</th><th></th></tr>'+t1;
   document.getElementById('t2').innerHTML='<tr><th>sub</th><th>ชื่อเล่น</th><th>ชื่อจริง</th><th>อีเมล</th><th>แต้ม</th><th>หัวใจ</th><th>วันนี้</th><th>เข้าแรก</th><th>ล่าสุด</th><th>เปลี่ยนชื่อ</th><th></th></tr>'+t2;
   document.getElementById('t3').innerHTML='<tr><th>sub</th><th>ชื่อเล่น</th><th>ชื่อจริง</th><th>อีเมล</th><th>เหตุผล</th><th>แบนเมื่อ</th><th></th></tr>'+t3;
+  document.querySelectorAll('[data-admin-action]').forEach(button=>button.addEventListener('click',()=>button.dataset.adminAction==='ban'?ban(button.dataset.sub):unban(button.dataset.sub)));
 }
 async function call(path,body){
   const r=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -228,6 +229,8 @@ async function call(path,body){
 }
 async function ban(sub,name,email){await call('/admin/ban',{sub,reason:reason()});}
 async function unban(sub){await call('/admin/unban',{sub});}
+document.getElementById('loadBtn').addEventListener('click',load);
+document.getElementById('q').addEventListener('input',render);
 // ── สตูดิโอวาดชุด (พรีวิว sprite + วาด 16×16) ──
 const shade=(hex,f)=>{const n=parseInt(hex.slice(1),16);return 'rgb('+Math.round(((n>>16)&255)*f)+','+Math.round(((n>>8)&255)*f)+','+Math.round((n&255)*f)+')'};
 const SMAPS={
