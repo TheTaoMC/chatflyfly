@@ -214,11 +214,13 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   });
 
   // ── /send ต้องมี session ──
-  await t.test("send: ไม่มี session → 401 / มี session → 200 + ได้ +2 แต้ม", async () => {
+  await t.test("send: ไม่มี session → 401 / มี session → 200 + ได้ +2 แต้ม และปลอมชื่อไม่ได้", async () => {
     const bad = await post("/send", { name: "ราเมง1234", text: "hi" });
     assert.equal(bad.status, 401);
-    const ok = await post("/send", { name: "ราเมง1234", text: "hi", session: sessionA });
+    const ok = await post("/send", { name: "ชื่อที่พยายามปลอม", text: "hi", session: sessionA });
     assert.equal(ok.status, 200);
+    const sent = (await (await get("/messages")).json()).messages.at(-1);
+    assert.equal(sent.name, "ราเมง1234");
     // ส่งข้อความ = +2 แต้ม → /users โชว์คะแนน + เลเวล (ยังเป็นมือใหม่) + ความคืบหน้า
     const { users } = await (await get("/users")).json();
     const me = users.find((u) => u.name === "ราเมง1234");
@@ -272,7 +274,8 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   // ── ข้อความเสียง (kind=voice) ──
   await t.test("voice: อัปโหลดเสียง → ข้อความ voice + เสิร์ฟ mime audio + ext เสียงต้องมี kind=voice", async () => {
     await new Promise((r) => setTimeout(r, 320)); // รอพ้น cooldown ของการส่งข้อความก่อน
-    const res = await post("/upload", { name: "ราเมง1234", ext: "webm", img: Buffer.from("fake-audio").toString("base64"), session: sessionA, kind: "voice" });
+    const webm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x93, 0x42, 0x82]); // EBML/WebM signature
+    const res = await post("/upload", { name: "ราเมง1234", ext: "webm", img: webm.toString("base64"), session: sessionA, kind: "voice" });
     assert.equal(res.status, 200);
     const { messages } = await (await get("/messages")).json();
     const v = messages.find((m) => m.voice);
@@ -293,6 +296,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
 
   // ── กันฟาร์มคะแนน: cooldown + โควต้าต่อวัน ──
   await t.test("คะแนน: cooldown กันสแปม + โควต้าวันละ 6 แต้ม (เทสต์ env)", async () => {
+    assert.equal((await post("/claim", { name: "ราเมง999", avatar: "🐸", session: sessionB })).status, 200);
     const pts = async () => (await (await get("/users")).json()).users.find((u) => u.name === "ราเมง999")?.points;
     // ส่งข้อความ 1 → ได้ +2
     assert.equal((await post("/send", { name: "ราเมง999", text: "หนึ่ง", session: sessionB })).status, 200);

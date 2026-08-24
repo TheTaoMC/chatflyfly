@@ -42,10 +42,6 @@
   .char-prog { height: 4px; background: #241b14; border: 1px solid #0a0713; margin-top: 3px; }
   .char-prog i { display: block; height: 100%; background: linear-gradient(90deg, #ffcc00, #ff9d5c); }
   /* ชามราเมงหน้าเคาน์เตอร์ — ตัวละครนั่งอยู่หลังชาม (bowl ทับขาสไปรต์) + ไอน้ำลอยขึ้น */
-  .char .bowl { position: relative; z-index: 1; width: 60px; height: 26px; margin: -16px auto 0; background: linear-gradient(180deg, var(--bc, #f0dfb8), var(--bd, #d9c08f)); border: 2px solid #8a5a28; border-radius: 6px 6px 14px 14px; box-shadow: 0 3px 0 #3a1c0a; }
-  .char .bowl::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 50% 30%, #e89a38, #b96a16 80%); }
-  .char .bowl .st { position: absolute; bottom: 70%; left: 28%; width: 7px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.5); filter: blur(1px); animation: steam 1.7s ease-out infinite; }
-  .char .bowl .st.s2 { left: 62%; animation-delay: .6s; }
   @keyframes steam { 0% { transform: translate(0,0) scaleY(.6); opacity: 0; } 30% { opacity: .85; } 100% { transform: translate(3px,-16px) scaleY(1.5); opacity: 0; } }
   #shopGrid .empty { color: #b08a5c; font-size: 12px; text-align: center; padding: 20px 0; }
   /* เคาน์เตอร์ไม้ + พื้นไม้ */
@@ -54,6 +50,8 @@
   header { background: linear-gradient(180deg, #3a2b63, #2a1d4d); color: #ffcc00; padding: 12px 16px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; border-bottom: 4px solid #0a0713; text-shadow: 2px 2px 0 #000; }
   #nameBtn { background: #241b3b; border: 2px solid #ffcc00; color: #ffcc00; padding: 5px 14px; font-size: 13px; font-weight: 700; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 3px 3px 0 #000; }
   #headerBtns { display: flex; gap: 8px; }
+  #todayBtn { background: #3a1224; border-color: #8b3158; color: #ffb3dc; padding: 5px 10px; }
+  #matchBtn { background:#17322a; border-color:#0f5a45; color:#8fffd8; padding:5px 10px; }
   #soundBtn { background: #241b3b; border: 2px solid #4a3d75; color: #00e5ff; padding: 5px 10px; font-size: 13px; box-shadow: 3px 3px 0 #000; }
   #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 70%; padding: 8px 12px; background: #241b36; border: 2px solid #0a0713; align-self: flex-start; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
@@ -66,6 +64,9 @@
   button { padding: 10px 18px; border: 2px solid #0a0713; background: #3a2b63; color: #ffcc00; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; box-shadow: 3px 3px 0 #000; }
   button:hover { background: #4a3d75; transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
   button:active { transform: translate(3px, 3px); box-shadow: none; }
+  #imgBtn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border: 2px solid #0a0713; background: #3a2b63; color: #ffcc00; font-size: 14px; font-weight: 700; font-family: inherit; line-height: 1; cursor: pointer; text-shadow: 1px 1px 0 #000; box-shadow: 3px 3px 0 #000; }
+  #imgBtn:hover { background: #4a3d75; transform: translate(1px, 1px); box-shadow: 2px 2px 0 #000; }
+  #imgBtn:active { transform: translate(3px, 3px); box-shadow: none; }
   /* ข้อความเสียง */
   .msg audio { display: block; margin-top: 6px; max-width: 220px; height: 32px; }
   #voiceBtn.rec { background: #a92a12; color: #fff; animation: recBlink 1s step-start infinite; }
@@ -83,22 +84,48 @@
   #voicePanelBtns button { flex: 1; }
   #voiceSend { background: #17322a; border-color: #0f5a45; }
   #toast { position: fixed; top: 16px; right: 16px; background: #2a1d4d; color: #ffcc00; border: 2px solid #0a0713; box-shadow: 3px 3px 0 #000; padding: 10px 14px; display: none; z-index: 6; }
+  #todayPanel { position: fixed; z-index: 11; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); background: #171122; border-left: 4px solid #0a0713; box-shadow: -8px 0 0 rgba(0,0,0,.35); display: none; flex-direction: column; }
+  #todayPanel.open { display: flex; }
+  #todayHead { padding: 16px; border-bottom: 3px solid #0a0713; background: linear-gradient(180deg,#3a122b,#241128); display:flex; align-items:center; justify-content:space-between; color:#ffb3dc; }
+  #todayHead b { font-size: 16px; } #todayHead small { color:#c9a8bd; display:block; font-size:11px; margin-top:4px; }
+  #todayClose { padding: 4px 9px; background:transparent; border:0; color:#ffb3dc; box-shadow:none; }
+  #postForm { display:flex; padding:12px; gap:8px; border-bottom:2px solid #3b2a47; }
+  #postText { min-height:48px; resize:vertical; flex:1; padding:9px; background:#0e0b16; border:2px solid #6e3a5d; color:#fff; font:inherit; }
+  #postText:focus { outline:none; border-color:#ff6ec7; }
+  #postForm button { align-self:end; background:#5a2043; color:#ffd2e9; }
+  #postHint { padding:0 12px 10px; font-size:11px; color:#a88ca0; border-bottom:2px solid #3b2a47; }
+  #postList { overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .post { background:#241b36; border:2px solid #0a0713; box-shadow:4px 4px 0 rgba(0,0,0,.4); padding:10px; }
+  .post.mine { border-color:#7c345f; } .postName { color:#ff9fd3; font-weight:700; font-size:12px; } .postTime { float:right; color:#a88ca0; font-size:11px; }
+  .postBody { white-space:pre-wrap; overflow-wrap:anywhere; margin:7px 0 10px; line-height:1.45; }
+  .comments { border-top:1px dashed #584262; padding-top:7px; display:flex; flex-direction:column; gap:5px; }
+  .comment { font-size:12px; color:#ded6e8; overflow-wrap:anywhere; } .comment b { color:#00e5ff; } .comment time { color:#8a84a8; font-size:10px; margin-left:5px; }
+  .commentForm { display:flex; gap:5px; margin-top:5px; } .commentForm input { min-width:0; padding:6px 8px; font-size:12px; } .commentForm button { padding:6px 9px; font-size:11px; background:#3a2b63; }
+  .postEmpty { color:#a88ca0; text-align:center; padding:32px 12px; font-size:13px; }
+  #matchPanel { position:fixed; z-index:12; inset:0; display:none; background:rgba(0,0,0,.7); align-items:center; justify-content:center; }
+  #matchPanel.open { display:flex; } #matchBox { width:min(480px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; background:#171122; border:3px solid #00cfa0; box-shadow:8px 8px 0 #000; }
+  #matchTop { display:flex; justify-content:space-between; align-items:start; } #matchTop h3 { margin:0; color:#8fffd8; } #matchClose { padding:3px 8px; border:0; box-shadow:none; background:transparent; color:#8fffd8; }
+  .matchHelp { color:#aaa3c1; font-size:12px; line-height:1.5; } #tagChoices { display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; } #tagChoices label { cursor:pointer; padding:6px 8px; font-size:12px; border:1px solid #4a3d75; background:#241b36; } #tagChoices input { accent-color:#00cfa0; }
+  #matchSize { display:flex; gap:8px; } #matchSize button.on { background:#00a77b; color:#081814; } #matchJoin { width:100%; margin-top:14px; background:#136449; color:#c6ffe9; } #matchLeave { width:100%; margin-top:10px; background:#3a1a14; color:#ffb5a8; }
+  #matchState { text-align:center; padding:13px; margin-top:12px; background:#0e0b16; border:1px solid #3a5d55; color:#8fffd8; font-size:12px; } #roomArea { margin-top:14px; } #roomPrompt { padding:10px; background:#2b213c; color:#ffe1a3; font-size:13px; }
+  #roomMessages { max-height:190px; overflow:auto; padding:8px 0; display:flex; flex-direction:column; gap:5px; } .roomMsg { font-size:12px; padding:6px 8px; background:#241b36; } .roomMsg b { color:#00e5ff; } #roomForm { display:flex; gap:6px; } #roomForm input { min-width:0; }
+  #gameArea { margin-top:12px; padding:10px; border:1px dashed #a46a39; background:#241a18; } #gameArea b { color:#ffca83; font-size:13px; } #gameAnswer { width:100%; margin-top:8px; } #gameArea button { margin-top:6px; font-size:12px; padding:6px 9px; background:#6a4120; color:#ffe1a3; } .gameAnswers { margin-top:8px; font-size:12px; color:#eee; } .gameAnswers div { padding:4px 0; }
   #nameModal, #dressModal, #profileModal { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 10; }
-  .modal { position: relative; background: #1e1630; border: 3px solid #ffcc00; box-shadow: 8px 8px 0 rgba(0,0,0,.7); padding: 24px; width: 300px; text-align: center; }
+  .modal { position: relative; background: #1e1630; border: 3px solid #ffcc00; box-shadow: 8px 8px 0 rgba(0,0,0,.7); padding: 22px; width: min(340px, calc(100vw - 32px)); text-align: center; }
   #modalClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
   #modalClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
-  .modal h3 { margin: 0 0 12px; color: #ffcc00; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
-  .modal input { width: 100%; }
+  .modal h3 { margin: 0 0 14px; color: #ffcc00; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
+  .modal input { width: 100%; min-height: 38px; padding: 8px 10px; border: 2px solid #4a3d75; background: #0e0b16; color: #fff; font: inherit; }
   .modal button { margin-top: 10px; width: 100%; }
-  #gsiBox { display: flex; justify-content: center; margin: 10px 0 4px; }
-  #gsiStatus { color: #8a84a8; font-size: 12px; margin: 6px 0 2px; min-height: 16px; }
+  #gsiBox { display: flex; justify-content: center; margin: 10px auto 6px; min-height: 40px; }
+  #gsiStatus { color: #aaa3c1; font-size: 12px; line-height: 1.4; margin: 6px auto 12px; min-height: 17px; max-width: 280px; }
   #logoutBtn { background: #3a1a14; color: #ff9d8c; }
   #modalErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; min-height: 18px; }
   /* หน้าโปรไฟล์ */
   .modal.prof { width: 280px; }
   #profClose { position: absolute; top: 6px; right: 6px; width: auto; background: none; color: #8a84a8; border: none; box-shadow: none; font-size: 16px; padding: 4px 10px; }
   #profClose:hover { background: none; color: #ff6ec7; transform: none; box-shadow: none; }
-  #profAvatar { width: 96px; height: 96px; image-rendering: pixelated; margin: 0 auto 6px; display: block; }
+  #profAvatar { width: 65px; height: 110px; image-rendering: pixelated; margin: 0 auto 6px; display: block; }
   #profName { color: #ffcc00; font-weight: 700; font-size: 16px; }
   #profStatus { font-size: 12px; margin-top: 2px; }
   #profLevel { color: #ffb35c; font-size: 13px; margin-top: 8px; }
@@ -107,26 +134,29 @@
   #profHeart:disabled { opacity: .55; cursor: default; }
   #profMeta { color: #8a84a8; font-size: 11px; margin-top: 6px; }
   #profErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; }
-  #modalAvatarRow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
-  #modalAvatar { width: 72px; height: 72px; image-rendering: pixelated; }
-  .avatar-stack { position: relative; display: inline-block; width: var(--av-size, 96px); height: var(--av-size, 96px); }
-  .avatar-stack img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; image-rendering: pixelated; }
-  #modalDress { margin: 0; width: auto; }
+  #modalAvatarRow { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 150px; margin: 14px 0 4px; padding: 12px 10px; background: #171122; border: 2px solid #0a0713; }
+  #modalAvatar { width: 65px; height: 110px; image-rendering: pixelated; }
+  .avatar-stack { position: relative; display: inline-block; width: var(--av-width, 57px); height: var(--av-height, 96px); }
+  .avatar-stack img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .avatar-stack .avatar-bowl { z-index: 5; }
+  .avatar-stack .avatar-base { z-index: 2; }
+  .avatar-stack .avatar-part { z-index: 3; }
+  .char .avatar-stack img { width: 100%; height: 100%; }
+  .avatar-steam { position: absolute; z-index: 4; bottom: 27%; width: 10%; height: 18%; border-radius: 50%; background: rgba(255,55,55,.92); filter: blur(1px); animation: steam 1.7s ease-out infinite; pointer-events: none; }
+  .avatar-steam.s1 { left: 35%; }
+  .avatar-steam.s2 { left: 57%; animation-delay: .6s; }
+  #modalDress { margin: 0; width: min(100%, 190px); padding: 9px 8px; }
   .modal.dress { width: 300px; }
-  #dressPreview { width: 128px; height: 128px; image-rendering: pixelated; display: block; margin: 0 auto 4px; }
-  #dressHearts { color: #ff6ec7; font-size: 13px; margin: 4px 0 8px; }
+  #dressPreview { min-height: 128px; display: grid; place-items: center; margin: 0 auto 4px; }
   #dressTabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   #dressTabs button { margin: 0; width: auto; padding: 5px 9px; font-size: 12px; }
   #dressTabs button.on { background: #ffcc00; color: #12100e; }
   #dressGrid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-height: 220px; overflow-y: auto; }
   .dvar { display: flex; flex-direction: column; align-items: center; border: 2px solid #3a2a1a; background: #181512; padding: 4px; width: 66px; cursor: pointer; }
   .dvar img { width: 64px; height: 64px; image-rendering: pixelated; }
+  .dvar .avatar-stack img { width: 100%; height: 100%; }
   .dvar span { font-size: 10px; color: #b8a888; text-align: center; }
-  .dvar b { font-size: 11px; }
-  .dvar i { font-size: 10px; color: #7ee08a; font-style: normal; }
   .dvar.on { border-color: #ffcc00; }
-  .dvar.locked { opacity: .4; cursor: not-allowed; }
-  .dvar button { margin: 4px 0 0; width: 100%; padding: 3px; font-size: 11px; }
   #dressErr { color: #ff6ec7; font-size: 13px; margin-top: 8px; min-height: 16px; }
   #emojiRow button.sel { background: #ffcc00; border-color: #000; }
   /* scrollbar พิกเซล */
@@ -163,7 +193,7 @@
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
-<header>💬 กลุ่มแชท<span id="headerBtns"><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
+<header>💬 กลุ่มแชท<span id="headerBtns"><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
 <div id="messages"></div>
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
@@ -174,6 +204,17 @@
 </form>
 </div>
 <div id="toast"></div>
+<aside id="todayPanel" aria-label="ฟีดวันนี้">
+  <div id="todayHead"><div><b>✦ วันนี้</b><small>โพสต์และคอมเมนต์จะหายเองใน 24 ชั่วโมง</small></div><button id="todayClose" title="ปิด">✕</button></div>
+  <form id="postForm"><textarea id="postText" maxlength="280" placeholder="วันนี้กินอะไรดี? เล่าให้ร้านฟังหน่อย…"></textarea><button type="submit">โพสต์</button></form>
+  <div id="postHint">ฟีดสั้น ๆ ของคนในร้าน — ไม่ใช่คลังโพสต์ถาวร</div>
+  <div id="postList"><div class="postEmpty">กำลังโหลด…</div></div>
+</aside>
+<div id="matchPanel"><section id="matchBox"><div id="matchTop"><div><h3>🎲 สุ่มโต๊ะ</h3><p class="matchHelp">จับคู่จากความสนใจที่ตรงกัน แล้วคุยในห้องชั่วคราว 30 นาที</p></div><button id="matchClose">✕</button></div>
+  <div id="tagChoices"><label><input type="checkbox" value="กิน"> กิน</label><label><input type="checkbox" value="เพลง"> เพลง</label><label><input type="checkbox" value="เกม"> เกม</label><label><input type="checkbox" value="หนัง"> หนัง</label><label><input type="checkbox" value="ระบาย"> ระบาย</label><label><input type="checkbox" value="หาเพื่อน"> หาเพื่อน</label></div>
+  <div id="matchSize"><button type="button" data-size="2" class="on">คุย 2 คน</button><button type="button" data-size="5">ตั้งโต๊ะ 5 คน</button></div><button id="matchJoin">เริ่มสุ่มโต๊ะ</button><div id="matchState">เลือกความสนใจ แล้วเริ่มได้เลย</div><button id="matchLeave" style="display:none">ออกจากคิว / ออกจากโต๊ะ</button>
+  <div id="roomArea" style="display:none"><div id="roomPrompt"></div><div id="roomMessages"></div><form id="roomForm"><input id="roomText" maxlength="500" placeholder="คุยกับคนในโต๊ะ..." autocomplete="off"><button>ส่ง</button></form><div id="gameArea"></div></div>
+</section></div>
 <div id="gifPanel">
   <input id="gifSearch" type="text" placeholder="ค้นหา GIF... (Giphy)" autocomplete="off" />
   <div id="gifGrid"><div class="empty">พิมพ์คำค้นเพื่อค้นหา GIF</div></div>
@@ -202,6 +243,18 @@
     <div id="modalErr"></div>
   </div>
 </div>
+
+<div id="dressModal">
+  <div class="modal dress">
+    <button id="dressClose" title="ปิด">✕</button>
+    <h3>🎨 แต่งตัว</h3>
+    <div id="dressPreview"></div>
+    <div id="dressTabs"></div>
+    <div id="dressGrid"></div>
+    <button id="dressSave">💾 บันทึกชุด</button>
+    <div id="dressErr"></div>
+  </div>
+</div>
 <div id="profileModal">
   <div class="modal prof">
     <button id="profClose" title="ปิด">✕</button>
@@ -214,18 +267,6 @@
     <div id="profMeta"></div>
     <button id="profEdit" style="display:none">เปลี่ยนชื่อ/อวตาร</button>
     <div id="profErr"></div>
-  </div>
-</div>
-<div id="dressModal">
-  <div class="modal dress">
-    <button id="dressClose" title="ปิด">✕</button>
-    <h3>🎨 แต่งตัว + ร้านค้า</h3>
-    <div id="dressPreview"></div>
-    <div id="dressHearts">💗 หัวใจ 0</div>
-    <div id="dressTabs"></div>
-    <div id="dressGrid"></div>
-    <button id="dressSave">💾 บันทึกชุด</button>
-    <div id="dressErr"></div>
   </div>
 </div>
 <script>
@@ -259,10 +300,10 @@
       "...HHHHHHHHHH...",
       "..HHHHHHHHHHHH..",
       "..HHHHHHHHHHHH..",
-      "..HHFFFFFFFFHH..",
-      ".HHFFFFFFFFFFHH.",
-      ".HHFFFFFFFFFFHH.",
-      "...FFFFFFFFFF...",
+      "..HH........HH..",
+      ".HH..........HH.",
+      ".HH..........HH.",
+      "................",
     ],
     face: [
       ".....E....E.....",
@@ -313,36 +354,31 @@
   };
   const parseToken = (t) => { const m = TOKEN_RE.exec(t); return m ? { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] } : { b: 1, c: 1, h: 1, f: 1, o: 0 }; };
   const tokenOf = (t) => `b${t.b}c${t.c}h${t.h}f${t.f}o${t.o}`;
-  const bowlColor = (avatar) => { const m = TOKEN_RE.exec(avatar); return m ? PARTS.b.vars[+m[1]].c : "#d9c08f"; };
-  // ---- Avatar: PNG layers ซ้อนกัน 5 เลเยอร์ ไม่ต้องใช้ canvas ----
-  const TYPE_DIR = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" };
-  // คืน path ของ PNG file สำหรับชิ้นส่วนแต่ละชั้น (built-in หรือ custom)
-  function partPng(type, id) {
-    const key = type + id;
-    // ตรวจ custom parts ก่อน (มี .png field จากสตูดิโอ)
-    if (CUSTOM_PARTS[key] && CUSTOM_PARTS[key].png) return CUSTOM_PARTS[key].png;
-    // built-in
-    return `/avatars/${TYPE_DIR[type]}/${key}.png`;
-  }
-  // คืน HTML string ของ avatar แบบ 5 เลเยอร์ (ใช้ PNG files ใน /avatars/)
-  function avatarHtml(avatar, size) {
-    const m = TOKEN_RE.exec(avatar);
-    if (!m) {
-      // legacy emoji — แสดงเป็นตัวอักษร
-      const emoji = EMOJI_COLORS[avatar] ? avatar : "🍜";
-      return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
-    }
-    const t = { b: +m[1], c: +m[2], h: +m[3], f: +m[4], o: +m[5] };
+  // ชามที่เพิ่มจากแอดมินอาจมี id นอกเหนือจากชุดเก่า b1–b5
+  const bowlColor = (avatar) => {
+    const match = TOKEN_RE.exec(avatar);
+    return match ? PARTS.b.vars[+match[1]]?.c || "#d9c08f" : "#d9c08f";
+  };
+  // ---- Avatar: ตัวละครหลักหนึ่งเลเยอร์; จะเพิ่มเลเยอร์ใหม่ภายหลังได้ ----
+  const BASE_AVATAR_URL = "/simple/body.png";
+  function avatarHtml(avatar, height) {
+    const width = Math.round(height * 608 / 1024);
+    const token = parseToken(avatar);
+    const bowl = CUSTOM_PARTS["b" + token.b];
     const layers = [];
-    for (const [type, id] of Object.entries(t)) {
-      if (type === "o" && id === 0) continue; // ไม่ใส่หมวก
-      layers.push(partPng(type, id));
+    for (const type of ["c", "h", "f", "o"]) {
+      const part = CUSTOM_PARTS[type + token[type]];
+      // ใช้ URL เฉพาะของชิ้นส่วนนั้น เพื่อไม่ให้เบราว์เซอร์หยิบภาพเก่าจากแคช
+      if (part?.png) layers.push(`${part.png}?v=${encodeURIComponent(part.id)}`);
     }
-    return `<div class="avatar-stack" style="--av-size:${size}px">${layers.map((src) => `<img src="${src}" alt="">`).join("")}</div>`;
+    const hasCustomBowl = Boolean(bowl?.png);
+    const steam = hasCustomBowl ? '<i class="avatar-steam s1"></i><i class="avatar-steam s2"></i>' : "";
+    const bowlHtml = hasCustomBowl ? `<img class="avatar-bowl" src="${bowl.png}?v=${encodeURIComponent(bowl.id)}" alt="">` : "";
+    return `<div class="avatar-stack" style="--av-width:${width}px;--av-height:${height}px">${bowlHtml}${steam}<img class="avatar-base" src="${BASE_AVATAR_URL}" alt="ตัวละคร">${layers.map((src) => `<img class="avatar-part" src="${src}" alt="">`).join("")}</div>`;
   }
   // backward compat
-  function pixelSprite(avatar) { return avatarHtml(avatar, 96); }
-  function renderSprite(avatar, size = 96) { return avatarHtml(avatar, size); }
+  function pixelSprite(avatar) { return avatarHtml(avatar, 110); }
+  function renderSprite(avatar, size = 110) { return avatarHtml(avatar, size); }
 
   // ---- Google login (บังคับ) + จองชื่อ (กันชื่อซ้ำ) ----
   const modal = $("nameModal"), modalName = $("modalName"), modalGo = $("modalGo"), modalErr = $("modalErr"), modalClose = $("modalClose"), gsiBox = $("gsiBox"), gsiStatus = $("gsiStatus"), logoutBtn = $("logoutBtn"), modalAvatarRow = $("modalAvatarRow"), modalAvatar = $("modalAvatar");
@@ -360,7 +396,7 @@
     // ยังไม่ login = ยังไม่ต้องใส่ชื่อ/เลือกตัวละคร — จะโผล่ให้เฉพาะหลัง login สำเร็จ
     modalName.style.display = logged ? "block" : "none";
     modalAvatarRow.style.display = logged ? "flex" : "none";
-    if (logged) modalAvatar.innerHTML = pixelSprite(myAvatar);
+    if (logged) modalAvatar.innerHTML = avatarHtml(myAvatar, 110);
 
     modalGo.style.display = logged ? "block" : "none";
     logoutBtn.style.display = logged ? "block" : "none";
@@ -486,6 +522,79 @@
   const fmt = (t) => new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // ---- ฟีด "วันนี้" — ข้อมูลมาจาก memory ของ server และหมดอายุใน 24 ชั่วโมง ----
+  const todayPanel = $("todayPanel"), postList = $("postList"), postText = $("postText");
+  let lastPostsJson = "";
+  const openToday = () => { todayPanel.classList.add("open"); pollPosts(); postText.focus(); };
+  $("todayBtn").addEventListener("click", openToday);
+  $("todayClose").addEventListener("click", () => todayPanel.classList.remove("open"));
+  function renderPosts(posts) {
+    if (!posts.length) { postList.innerHTML = '<div class="postEmpty">ยังไม่มีโพสต์วันนี้<br>เริ่มทักคนในร้านได้เลย ✦</div>'; return; }
+    postList.innerHTML = posts.map((p) => {
+      const comments = (p.comments || []).map((c) => `<div class="comment"><b>${esc(c.name)}</b> ${esc(c.text)}<time>${fmt(c.time)}</time></div>`).join("");
+      return `<article class="post${p.name === myName ? " mine" : ""}"><span class="postName">${esc(p.name)}</span><span class="postTime">${fmt(p.time)}</span><div class="postBody">${esc(p.text)}</div><div class="comments">${comments}<form class="commentForm" data-post-id="${esc(p.id)}"><input maxlength="280" placeholder="เมนต์สั้น ๆ ..." aria-label="เขียนเมนต์"><button>เมนต์</button></form></div></article>`;
+    }).join("");
+    postList.querySelectorAll(".commentForm").forEach((f) => f.addEventListener("submit", sendComment));
+  }
+  async function pollPosts() {
+    try {
+      const r = await fetch("/posts"); const { posts } = await r.json();
+      const next = JSON.stringify(posts);
+      if (next !== lastPostsJson) { lastPostsJson = next; renderPosts(posts); }
+    } catch { /* รอรอบต่อไป */ }
+  }
+  async function sendComment(e) {
+    e.preventDefault();
+    if (!myName || !mySession) return toast("ตั้งชื่อและเข้าสู่ระบบก่อน");
+    const input = e.currentTarget.querySelector("input"), value = input.value.trim();
+    if (!value) return;
+    const r = await fetch("/posts/comment", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ name:myName, session:mySession, postId:e.currentTarget.dataset.postId, text:value }) });
+    if (!r.ok) return toast((await r.json()).error || "เมนต์ไม่สำเร็จ");
+    input.value = ""; lastPostsJson = ""; pollPosts();
+  }
+  $("postForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!myName || !mySession) return toast("ตั้งชื่อและเข้าสู่ระบบก่อน");
+    const value = postText.value.trim(); if (!value) return;
+    const r = await fetch("/posts", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ name:myName, session:mySession, text:value }) });
+    if (!r.ok) return toast((await r.json()).error || "โพสต์ไม่สำเร็จ");
+    postText.value = ""; lastPostsJson = ""; pollPosts();
+  });
+  setInterval(() => todayPanel.classList.contains("open") && pollPosts(), 3000);
+
+  // ---- สุ่มโต๊ะ: queue และห้องทั้งหมดเป็นข้อมูลชั่วคราวของ server ----
+  const matchPanel = $("matchPanel"), matchState = $("matchState"), roomArea = $("roomArea");
+  let matchSize = 2, currentRoom = null, roomJson = "";
+  const openMatch = () => { matchPanel.classList.add("open"); pollMatch(); };
+  $("matchBtn").addEventListener("click", openMatch); $("matchClose").addEventListener("click", () => matchPanel.classList.remove("open"));
+  $("matchSize").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { matchSize = Number(b.dataset.size); $("matchSize").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); }));
+  const roomLeft = (t) => Math.max(0, Math.ceil((t - Date.now()) / 60000));
+  function renderRoom(room) {
+    currentRoom = room;
+    if (!room) { roomArea.style.display = "none"; return; }
+    roomArea.style.display = "block"; matchState.textContent = `โต๊ะ ${room.users.length} คน · เหลือประมาณ ${roomLeft(room.expiresAt)} นาที`;
+    $("matchLeave").style.display = "block"; $("matchJoin").style.display = "none";
+    $("roomPrompt").textContent = `โจทย์เปิดโต๊ะ: ${room.prompt}`;
+    $("roomMessages").innerHTML = room.messages.map((m) => `<div class="roomMsg"><b>${esc(m.name)}</b> ${esc(m.text)}</div>`).join("") || '<div class="matchHelp">เริ่มทักกันได้เลย ✦</div>';
+    const box = $("roomMessages"); box.scrollTop = box.scrollHeight;
+    const game = room.game;
+    $("gameArea").innerHTML = !game ? '<b>🎮 เกมตอบพร้อมกัน</b><p class="matchHelp">ทุกคนตอบก่อน แล้วระบบจะเปิดคำตอบพร้อมกัน</p><button type="button" id="startGame">เริ่มเกม</button>' : `<b>🎮 ${esc(game.prompt)}</b><p class="matchHelp">${game.done ? "เฉลยแล้ว!" : `ตอบแล้ว ${game.answers.length}/${room.users.length} คน — คำตอบจะยังซ่อนอยู่`}</p>${game.done ? `<div class="gameAnswers">${game.answers.map((a) => `<div><b>${esc(a.name)}</b> ${esc(a.text)}</div>`).join("")}</div><button type="button" id="startGame">เล่นข้อใหม่</button>` : `<form id="gameForm"><input id="gameAnswer" maxlength="280" placeholder="พิมพ์คำตอบของคุณ..." autocomplete="off"><button>ล็อกคำตอบ</button></form>`}`;
+    const start = $("startGame"); if (start) start.addEventListener("click", () => sendGame(""));
+    const gf = $("gameForm"); if (gf) gf.addEventListener("submit", (e) => { e.preventDefault(); sendGame($("gameAnswer").value); });
+  }
+  async function pollMatch() {
+    if (!mySession) return;
+    try { const r = await fetch(`/match/status?session=${encodeURIComponent(mySession)}`); if (!r.ok) return; const data = await r.json();
+      if (data.room) { const next = JSON.stringify(data.room); if (next !== roomJson) { roomJson = next; renderRoom(data.room); } }
+      else { roomJson = ""; renderRoom(null); $("matchJoin").style.display = "block"; $("matchLeave").style.display = data.waiting ? "block" : "none"; matchState.textContent = data.waiting ? `กำลังหาโต๊ะ ${data.waiting.target} คน (${data.waiting.tags.join(", ")})...` : "เลือกความสนใจ แล้วเริ่มได้เลย"; }
+    } catch { /* รอรอบถัดไป */ }
+  }
+  $("matchJoin").addEventListener("click", async () => { const tags = [...document.querySelectorAll("#tagChoices input:checked")].map((x) => x.value); if (!myName || !mySession) return toast("ตั้งชื่อและเข้าสู่ระบบก่อน"); if (!tags.length) return toast("เลือกความสนใจอย่างน้อย 1 อย่าง"); const r = await fetch("/match/join", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({session:mySession, target:matchSize, tags}) }); if (!r.ok) return toast((await r.json()).error || "เริ่มสุ่มไม่ได้"); matchState.textContent = "กำลังหาเพื่อนร่วมโต๊ะ..."; $("matchLeave").style.display="block"; pollMatch(); });
+  $("matchLeave").addEventListener("click", async () => { if (!mySession) return; await fetch("/match/leave", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session:mySession})}); currentRoom=null; roomJson=""; pollMatch(); });
+  $("roomForm").addEventListener("submit", async (e) => { e.preventDefault(); const input=$("roomText"), value=input.value.trim(); if (!value) return; const r=await fetch("/match/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session:mySession,text:value})}); if(!r.ok)return toast((await r.json()).error||"ส่งไม่สำเร็จ"); input.value=""; pollMatch(); });
+  async function sendGame(answer) { const r=await fetch("/match/game",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session:mySession,answer})}); if(!r.ok)return toast((await r.json()).error||"เริ่มเกมไม่สำเร็จ"); roomJson=""; pollMatch(); }
+  setInterval(() => matchPanel.classList.contains("open") && pollMatch(), 2000);
+
   function append(msg) {
     const div = document.createElement("div");
     div.className = "msg" + (msg.name === myName ? " me" : "");
@@ -519,7 +628,7 @@
   let lastNewestId = null; // id ข้อความล่าสุดที่เคยเห็น — ใช้หาว่ามีข้อความใหม่หรือไม่ (ไม่ beep ตอนโหลดรอบแรก/ตอนรูปถูกลบ)
   async function poll() {
     try {
-      const q = myName ? `?name=${encodeURIComponent(myName)}` : "";
+      const q = mySession ? `?session=${encodeURIComponent(mySession)}` : "";
       const res = await fetch("/messages" + q);
       const { messages } = await res.json();
       const newest = messages.length ? messages[messages.length - 1].id : null;
@@ -601,8 +710,9 @@
         const capped = u.dayCap && u.dayPoints >= u.dayCap;
         const nxt = capped ? `<div class="char-next">วันนี้ได้ครบแต้มแล้ว 🛑</div>`
           : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "";
-        const bc = bowlColor(u.avatar);
-        return `<div class="char${mine}">${pixelSprite(u.avatar)}<div class="bowl" style="--bc:${bc};--bd:${shade(bc, 0.75)}"><i class="st"></i><i class="st s2"></i></div><div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+        // ของตัวเองใช้ชุดที่เพิ่งบันทึกทันที ไม่ต้องรอรอบ poll ถัดไปจากเซิร์ฟเวอร์
+        const avatar = u.name === myName && myAvatar ? myAvatar : u.avatar;
+        return `<div class="char${mine}">${pixelSprite(avatar)}<div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
       }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
       // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
       const me = users.find((u) => u.name === myName);
@@ -677,89 +787,60 @@
     nameBtn.click(); // เปิด modal ตั้งชื่อ/อวตารเดิม
   });
 
-  // ---- แต่งตัว + ร้านค้าอวตาร (ซื้อชิ้นส่วนด้วยหัวใจ) ----
-  const dressModal = $("dressModal"), dressPreview = $("dressPreview"), dressHearts = $("dressHearts"), dressTabs = $("dressTabs"), dressGrid = $("dressGrid"), dressSave = $("dressSave"), dressErr = $("dressErr");
-  let dressToken = DEFAULT_TOKEN, ownedParts = [], shopItems = [], dressTab = "b", heartBalance = 0;
+  // ---- แต่งตัว: body.png เป็นฐาน และใช้เฉพาะชิ้นที่เพิ่มจากหน้าแอดมิน ----
+  const dressModal = $("dressModal"), dressPreview = $("dressPreview"), dressTabs = $("dressTabs"), dressGrid = $("dressGrid"), dressSave = $("dressSave"), dressErr = $("dressErr");
+  let dressToken = DEFAULT_TOKEN, ownedParts = [], dressTab = "c";
+  const DRESS_TABS = [["b", "ชาม"], ["c", "ตัว"], ["h", "หัว"], ["f", "หน้า"], ["o", "หมวก"]];
   async function openDress() {
     if (!mySession) return toast("เข้าสู่ระบบด้วย Google ก่อน");
     dressErr.textContent = "";
+    const [partsRes, meRes] = await Promise.all([fetch("/parts"), fetch("/me?session=" + encodeURIComponent(mySession))]);
+    const partsData = await partsRes.json();
+    const meData = await meRes.json();
+    if (!meRes.ok) return toast(meData.error || "โหลดข้อมูลไม่สำเร็จ");
+    Object.keys(CUSTOM_PARTS).forEach((key) => delete CUSTOM_PARTS[key]);
+    (partsData.parts || []).forEach((part) => { CUSTOM_PARTS[part.id] = part; });
+    ownedParts = meData.owned || [];
     dressToken = TOKEN_RE.test(myAvatar) ? myAvatar : DEFAULT_TOKEN;
-    const r = await fetch("/me?session=" + encodeURIComponent(mySession));
-    const d = await r.json();
-    if (!r.ok) return toast(d.error || "โหลดข้อมูลไม่สำเร็จ");
-    ownedParts = d.owned || [];
-    heartBalance = d.hearts || 0;
     dressModal.style.display = "flex";
-    dressTab = "b";
     renderDress();
   }
-  function setDressTab(k) { dressTab = k; renderDress(); }
-  function dressSet(p, id) { const t = parseToken(dressToken); t[p] = id; dressToken = tokenOf(t); renderDress(); }
+  function dressSet(type, id) {
+    const token = parseToken(dressToken);
+    token[type] = id;
+    dressToken = tokenOf(token);
+    renderDress();
+  }
   function renderDress() {
     dressPreview.innerHTML = renderSprite(dressToken, 128);
-    dressHearts.textContent = `💗 หัวใจ ${heartBalance}`;
-    dressTabs.innerHTML = [
-      ["b", "🍜 ชาม"], ["c", "👕 ตัว"], ["h", "🙂 หัว"], ["f", "😊 หน้า"], ["o", "🎩 หมวก"], ["shop", "🛒 ร้านค้า"],
-    ].map(([k, l]) => `<button class="${k === dressTab ? "on" : ""}" onclick="setDressTab('${k}')">${l}</button>`).join("");
-    if (dressTab === "shop") return renderShop();
-    const p = dressTab;
-    const curId = parseToken(dressToken)[p];
-    const items = Object.entries(PARTS[p].vars).map(([id, v]) => ({ id: p + id, n: v.n, price: 0 }))
-      .concat(Object.values(CUSTOM_PARTS).filter((x) => x.type === p).map((x) => ({ id: x.id, n: x.name, price: x.price || 0 })));
-    dressGrid.innerHTML = items.map((it) => {
-      const vid = +it.id.slice(1);
-      const t = parseToken(dressToken); t[p] = vid;
-      const tok = tokenOf(t);
-      const own = ownedParts.includes(it.id) || !it.price; // ชิ้นส่วนฟรี = ใช้ได้ทุกคน
-      return `<div class="dvar ${vid === curId ? "on" : ""} ${own ? "" : "locked"}" title="${own ? "" : "ต้องซื้อจากร้านค้าก่อน"}" ${own ? `onclick="dressSet('${p}',${vid})"` : ""}>
-        ${renderSprite(tok, 64)}<span>${esc(it.n)}</span>${it.price ? `<b style="color:#ff6ec7">${it.price} 💗</b>` : ""}</div>`;
-    }).join("");
-  }
-  async function renderShop() {
-    if (!shopItems.length) {
-      const r = await fetch("/shop");
-      const d = await r.json();
-      if (r.ok) shopItems = d.items || [];
+    dressTabs.innerHTML = DRESS_TABS.map(([type, label]) => `<button class="${type === dressTab ? "on" : ""}" onclick="dressTab='${type}';renderDress()">${label}</button>`).join("");
+    const items = Object.values(CUSTOM_PARTS).filter((part) => part.type === dressTab);
+    if (!items.length) {
+      dressGrid.innerHTML = '<span>ยังไม่มีชิ้นส่วนในหมวดนี้ — เพิ่มได้ที่หน้า /admin</span>';
+      return;
     }
-    dressGrid.innerHTML = shopItems.map((it) => {
-      const own = ownedParts.includes(it.id);
-      const t = parseToken(dressToken); t[it.id[0]] = +it.id.slice(1);
-      return `<div class="dvar" title="${esc(it.desc || "")}">
-        ${renderSprite(tokenOf(t), 64)}
-        <span>${esc(it.name)}</span><b style="color:#ff6ec7">${it.price} 💗</b>
-        ${own ? "<i>มีแล้ว ✓</i>" : `<button onclick="buyPart('${it.id}')" ${heartBalance < it.price ? "disabled" : ""}>ซื้อ</button>`}
+    const currentId = parseToken(dressToken)[dressTab];
+    dressGrid.innerHTML = items.map((part) => {
+      const owned = !part.price || ownedParts.includes(part.id);
+      const previewToken = parseToken(dressToken);
+      previewToken[dressTab] = Number(part.id.slice(1));
+      return `<div class="dvar ${currentId === previewToken[dressTab] ? "on" : ""}" ${owned ? `onclick="dressSet('${dressTab}',${previewToken[dressTab]})"` : ""} title="${owned ? "" : "ต้องซื้อชิ้นส่วนนี้ก่อน"}">
+        ${renderSprite(tokenOf(previewToken), 64)}<span>${esc(part.name)}</span>${part.price ? `<span>${part.price} 💗</span>` : ""}
       </div>`;
     }).join("");
   }
-  async function buyPart(id) {
-    const r = await fetch("/shop/buy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, session: mySession }) });
-    const d = await r.json();
-    if (!r.ok) return (dressErr.textContent = d.error || "ซื้อไม่สำเร็จ");
-    ownedParts = d.owned;
-    heartBalance = d.hearts;
-    dressErr.textContent = "ซื้อสำเร็จ! ไปใส่ได้เลย 🎉";
-    renderDress();
-  }
   dressSave.addEventListener("click", async () => {
-    if (!myName) {
-      // ยังไม่เข้าแชท — แค่เซฟชุดไว้
-      myAvatar = dressToken;
-      localStorage.setItem("chatavatar", dressToken);
-
-      dressModal.style.display = "none";
-      return;
-    }
     const res = await fetch("/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: myName, avatar: dressToken, session: mySession }) });
-    const d = await res.json();
-    if (!res.ok) return (dressErr.textContent = d.error || "บันทึกไม่สำเร็จ");
+    const data = await res.json();
+    if (!res.ok) return (dressErr.textContent = data.error || "บันทึกไม่สำเร็จ");
     myAvatar = dressToken;
     localStorage.setItem("chatavatar", dressToken);
     dressModal.style.display = "none";
-    toast("เปลี่ยนชุดแล้ว 🎨");
+    pollUsers();
+    toast("บันทึกชุดแล้ว 🎨");
   });
   $("dressClose").addEventListener("click", () => (dressModal.style.display = "none"));
-  dressModal.addEventListener("click", (e) => e.target === dressModal && (dressModal.style.display = "none"));
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && dressModal.style.display === "flex") dressModal.style.display = "none"; });
+  dressModal.addEventListener("click", (event) => event.target === dressModal && (dressModal.style.display = "none"));
   $("modalDress").addEventListener("click", openDress);
 
   // กดตัวละครในร้าน = ดูโปรไฟล์

@@ -2,48 +2,64 @@
   {
     "id": "o5",
     "type": "o",
-    "name": "123",
-    "colorA": "#e67e22",
-    "colorB": "#5aa7e8",
-    "map": [
-      ".AAAAAA.........",
-      "AAAABBB.........",
-      "AAAABBBA........",
-      "AABBBBB.........",
-      "ABBBBBBA........",
-      ".BBBBBB.........",
-      ".ABBBBBA........",
-      ".A.BBBBA........",
-      "...ABBB.........",
-      ".....B..........",
-      "................",
-      "................",
-      "................",
-      "................",
-      "................",
-      "................"
-    ],
-    "price": 0
-  },
-  {
-    "id": "b6",
-    "type": "b",
-    "name": "123",
+    "name": "หมวก01",
     "price": 0,
-    "png": "/avatars/bowl/b6.png"
-  },
-  {
-    "id": "c6",
-    "type": "c",
-    "name": "2",
-    "price": 0,
-    "png": "/avatars/body/c6.png"
+    "png": "/avatars/hat/o5.png"
   },
   {
     "id": "h6",
     "type": "h",
-    "name": "3",
+    "name": "แว่น01",
     "price": 0,
     "png": "/avatars/head/h6.png"
+  },
+  {
+    "id": "b9",
+    "type": "b",
+    "name": "ชามดำ01",
+    "price": 0,
+    "png": "/avatars/bowl/b9.png"
+  },
+  {
+    "id": "f5",
+    "type": "f",
+    "name": "แก้มแดง",
+    "price": 0,
+    "png": "/avatars/face/f5.png"
+  },
+  {
+    "id": "c6",
+    "type": "c",
+    "name": "เสื้อฮาวาย01",
+    "price": 0,
+    "png": "/avatars/body/c6.png"
+  },
+  {
+    "id": "b6",
+    "type": "b",
+    "name": "ชามกาไก่",
+    "price": 0,
+    "png": "/avatars/bowl/b6.png"
+  },
+  {
+    "id": "c7",
+    "type": "c",
+    "name": "ชุดอวกาศ",
+    "price": 0,
+    "png": "/avatars/body/c7.png"
+  },
+  {
+    "id": "f6",
+    "type": "f",
+    "name": "แว่นเดี่ยว",
+    "price": 0,
+    "png": "/avatars/face/f6.png"
+  },
+  {
+    "id": "o6",
+    "type": "o",
+    "name": "หมวกดำสูง",
+    "price": 0,
+    "png": "/avatars/hat/o6.png"
   }
 ]

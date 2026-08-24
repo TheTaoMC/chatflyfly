@@ -1,4 +1,5 @@
 .git
+.env.local
 .freebuff
 knowledge.md
 uploads

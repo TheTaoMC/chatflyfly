@@ -29,7 +29,16 @@ const PORT = Number(process.env.PORT) || 3000; // Render/Fly ส่ง PORT env 
 const dayKey = (ms = Date.now()) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); // YYYY-MM-DD
 const MAX_MESSAGES = 200; // เก็บแค่ 200 ข้อความล่าสุดใน memory
 const MAX_TEXT = 2000; // จำกัดความยาวข้อความ
+const MAX_POSTS = 80; // ฟีดวันนี้อยู่ใน memory เท่านั้น
+const MAX_POST_TEXT = 280;
+const MAX_COMMENT_TEXT = 280;
+const POST_TTL_MS = Number(process.env.POST_TTL_MS) || 24 * 60 * 60 * 1000;
+const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS) || 30 * 60 * 1000;
+const QUEUE_TTL_MS = 20 * 60 * 1000;
+const MAX_ROOM_TEXT = 500;
 const MAX_IMG_BYTES = 5 * 1024 * 1024; // รูปไม่เกิน 5MB
+const MAX_JSON_BYTES = MAX_IMG_BYTES * 1.4 + 1024; // JSON upload (base64) ใหญ่สุด
+const MAX_ADMIN_UPLOAD_BYTES = 2 * 1024 * 1024; // pixel PNG ไม่ควรใหญ่กว่านี้
 const IMAGE_TTL_MS = Number(process.env.IMG_TTL_MS) || 5 * 60 * 1000; // รูปหายอัตโนมัติหลัง 5 นาที (env ใช้ทดสอบ)
 
 // ---- ร้านค้าอวตาร (ซื้อชิ้นส่วนด้วยหัวใจ) ----
@@ -71,26 +80,52 @@ const saveParts = () => fs.writeFileSync(PARTS_FILE, JSON.stringify(customParts,
 const IMG_EXT = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
 const AUDIO_EXT = { webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg" }; // ข้อความเสียง (kind=voice)
 const ALLOWED_EXT = { ...IMG_EXT, ...AUDIO_EXT }; // ใช้ตอนเสิร์ฟ /uploads/<file>
+// Render อยู่หลัง reverse proxy เสมอ จึงใช้ X-Forwarded-For ได้; local ปิดไว้กัน header ปลอม
+const TRUST_PROXY = process.env.TRUST_PROXY === "true" || process.env.RENDER === "true";
+
+// จำกัด body ระหว่างรับจริง ๆ ไม่ใช่รออ่านจนหมด (กัน memory DoS จาก chunked request)
+async function readBody(req, maxBytes = MAX_JSON_BYTES) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      req.destroy();
+      const error = new Error("request too large");
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+function hasExpectedFileSignature(buf, ext) {
+  if (ext === "png") return buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (ext === "jpg" || ext === "jpeg") return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (ext === "gif") return buf.length >= 6 && (buf.subarray(0, 6).toString() === "GIF87a" || buf.subarray(0, 6).toString() === "GIF89a");
+  if (ext === "webp") return buf.length >= 12 && buf.subarray(0, 4).toString() === "RIFF" && buf.subarray(8, 12).toString() === "WEBP";
+  if (ext === "webm") return buf.length >= 4 && buf.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+  if (ext === "mp3") return buf.length >= 3 && (buf.subarray(0, 3).toString() === "ID3" || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0));
+  if (ext === "m4a") return buf.length >= 12 && buf.subarray(4, 8).toString() === "ftyp";
+  return false;
+}
 
 // หน้าเว็บผู้ดูแล — โชว์คนออนไลน์ + identity (email/ชื่อจริง) ที่เก็บหลังบ้าน
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ผู้ดูแลร้านราเมง</title><style>
-body{font-family:ui-monospace,monospace;background:#12100e;color:#e8e6f0;margin:0;padding:20px}
-h1{color:#ffcc00}h2{color:#ff9d5c;border-bottom:2px solid #3a2a1a;padding-bottom:4px}
-input{padding:8px;background:#1d1a17;border:2px solid #5a4a3a;color:#fff;font-family:inherit}
-button{padding:8px 16px;background:#3a2b1a;border:2px solid #000;color:#ffcc00;font-weight:700;cursor:pointer;font-family:inherit}
-table{border-collapse:collapse;width:100%;margin-bottom:24px}th,td{border:1px solid #3a2a1a;padding:6px 10px;text-align:left;font-size:13px}
-th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
-.cards{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
-.card{flex:1;min-width:120px;background:#1d1a17;border:2px solid #3a2a1a;padding:10px 12px;text-align:center}
-.card b{font-size:22px;display:block}
-.card span{font-size:12px;color:#b8a888}
-#latestBox{margin-bottom:20px}
-.msg2{background:#181512;border:1px solid #3a2a1a;padding:5px 10px;margin-top:4px;font-size:12px;color:#e8e6f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+*{box-sizing:border-box}body{font-family:ui-monospace,Consolas,monospace;background:radial-gradient(circle at top,#2b1f4c 0,#110d1b 44%,#0b0911 100%);color:#eeeaf7;margin:0;padding:34px max(20px,calc((100vw - 1240px)/2));min-height:100vh}
+h1{margin:0 0 22px;padding:20px 22px;border:1px solid #6b58a1;border-left:6px solid #ffcc00;border-radius:12px;background:linear-gradient(135deg,#2d2250,#171126);color:#ffe28a;font-size:25px;letter-spacing:.5px;box-shadow:0 14px 36px rgba(0,0,0,.3)}
+h2{margin:32px 0 12px;color:#ffe1a3;font-size:16px;letter-spacing:.4px;border:0;padding:0}h2::before{content:"";display:inline-block;width:4px;height:18px;margin-right:9px;vertical-align:-3px;border-radius:99px;background:#ffcc00}
+p{color:#bdb4d4;line-height:1.6;margin:10px 0}body>p:nth-of-type(1),body>p:nth-of-type(2),body>p:nth-of-type(3){display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;margin:0;border:1px solid #433560;background:#1a1428}body>p:nth-of-type(1){border-radius:10px 10px 0 0}body>p:nth-of-type(3){border-radius:0 0 10px 10px;margin-bottom:18px}
+input,select{min-height:38px;padding:8px 10px;border:1px solid #5a4a78;border-radius:7px;background:#100c1b;color:#fff;font:inherit;outline:none}input:focus,select:focus{border-color:#ffcc00;box-shadow:0 0 0 3px rgba(255,204,0,.15)}#q{min-width:min(340px,100%)}
+button{min-height:38px;padding:8px 14px;border:1px solid #8466c2;border-radius:7px;background:linear-gradient(#4a3675,#342657);color:#fff1a8;font-weight:700;cursor:pointer;font-family:inherit;transition:transform .12s,filter .12s,box-shadow .12s}button:hover{filter:brightness(1.14);transform:translateY(-1px);box-shadow:0 5px 14px rgba(0,0,0,.28)}button:active{transform:none;box-shadow:none}
+table{border-collapse:separate;border-spacing:0;width:100%;margin-bottom:22px;overflow:hidden;border:1px solid #48385f;border-radius:10px;background:#171120}th,td{border-bottom:1px solid #302640;padding:10px 11px;text-align:left;font-size:12px}th{background:#2a2040;color:#d9d0eb;font-size:11px;letter-spacing:.35px;text-transform:uppercase}td{color:#e4dfee}tr:last-child td{border-bottom:0}tr:hover td{background:#21192f}.bad{color:#ff8780;min-height:20px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;margin:18px 0}.card{position:relative;overflow:hidden;background:linear-gradient(145deg,#241a35,#171120);border:1px solid #4a3965;border-radius:10px;padding:16px;text-align:left;box-shadow:0 8px 20px rgba(0,0,0,.18)}.card::after{content:"";position:absolute;right:-18px;bottom:-28px;width:80px;height:80px;border-radius:50%;background:rgba(154,116,234,.11)}.card b{font-size:27px;display:block}.card span{position:relative;color:#bdb4d4;font-size:12px;z-index:1}
+#latestBox{padding:14px 16px;border:1px solid #47375f;border-radius:10px;background:#171120;margin-bottom:12px}#latestBox>b{color:#ffe1a3}.msg2{background:#21192d;border:1px solid #3e3052;border-radius:7px;padding:8px 10px;margin-top:7px;font-size:12px;color:#e8e2f2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* สตูดิโอวาดชุด */
-.srow{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
-.srow select,.srow input{flex:1;padding:6px;min-width:120px}
+.srow{display:grid;grid-template-columns:170px 1fr 190px;gap:10px;margin:12px 0}.srow select,.srow input{width:100%;min-width:0}
 #sTools{display:flex;gap:4px;margin-bottom:6px}
 #sTools button{margin:0;width:auto;padding:4px 8px;font-size:11px}
 #sTools button.on{background:#ffcc00;color:#12100e}
@@ -102,10 +137,14 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
 #sGrid{display:grid;grid-template-columns:repeat(16,13px);gap:0;border:2px solid #5a4a3a;width:fit-content}
 #sGrid button{width:13px;height:13px;margin:0;padding:0;background:#241b14;border:1px solid #33281c;box-shadow:none}
 #sGrid button:hover{border-color:#ffcc00}
-#studioPreview img{width:112px;height:112px;image-rendering:pixelated;display:block;border:2px solid #3a2a1a}
+#sFile{width:100%;padding:12px;border:1px dashed #70579b;border-radius:8px;background:#171120}#sPreview{min-height:0}#studioPreview img,#sPreview img{width:112px;height:112px;object-fit:contain;image-rendering:pixelated;display:block;border:2px solid #70579b;border-radius:8px;background:#100c1b}
 #sErr{color:#ff6ec7;font-size:13px;margin-top:6px;min-height:16px}
+.part-item{display:flex;align-items:center;gap:14px;padding:11px 13px;margin-top:8px;border:1px solid #413154;border-radius:9px;background:#1b1527;color:#e9e3f3}.part-item img{width:88px;height:88px;object-fit:contain;image-rendering:pixelated;border-radius:7px;background:#100c1b}.part-item .part-meta{flex:1;min-width:0}.part-item b{display:block;color:#ffe1a3}.part-item span{font-size:11px;color:#bdb4d4}.part-item button.preview{border-color:#6c96c6;background:linear-gradient(#365f88,#294767);color:#dceeff}.part-item button.edit{border-color:#8b6ec2;background:linear-gradient(#563c82,#3d2a60);color:#eee2ff}.part-item button.delete{border-color:#a94b62;background:linear-gradient(#6d2f43,#512333);color:#ffd9dc}
+#outfitPreview{display:flex;justify-content:center;align-items:center;min-height:270px;padding:16px;border:1px solid #4b3b62;border-radius:10px;background:radial-gradient(circle at 50% 20%,#2c2140,#120d1c 72%)}.admin-avatar-stack{position:relative;width:152px;height:256px}.admin-avatar-stack img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;image-rendering:pixelated}.outfit-help{font-size:12px;color:#bdb4d4}
+#partsTabs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}#partsTabs button{min-height:34px;padding:6px 11px;font-size:12px;border-color:#514064;background:#21192d;color:#cfc5df}#partsTabs button.on{border-color:#ffcc00;background:#ffcc00;color:#20152e}
+@media(max-width:760px){body{padding:18px 12px}h1{font-size:20px;padding:16px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.srow{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}body>p:nth-of-type(1),body>p:nth-of-type(2),body>p:nth-of-type(3){align-items:stretch}input,#q{width:100%;min-width:0}}
 </style></head><body>
-<h1>🍜 หลังบ้านร้านราเมง (ผู้ดูแล)</h1>
+<h1>🍜 ศูนย์ควบคุมร้านราเมง</h1>
 <p>Admin token: <input id="tok" type="password" placeholder="ADMIN_TOKEN"> <button onclick="load()">โหลดข้อมูล</button></p>
 <p>เหตุผลการแบน: <input id="reason" placeholder="ไม่บังคับ"> (กดปุ่ม แบน ในตารางด้านล่าง)</p>
 <p>ค้นหา: <input id="q" placeholder="ชื่อเล่น / อีเมล / ชื่อจริง" oninput="render()"> (กรองทั้ง 3 ตาราง)</p>
@@ -115,8 +154,8 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
 <h2>คนที่ออนไลน์อยู่ (ชื่อเล่น → ตัวตนจริง)</h2><table id="t1"></table>
 <h2>ทุกคนที่เคยเข้าสู่ระบบ (เก็บหลังบ้าน)</h2><table id="t2"></table>
 <h2>Blocklist (โดนแบนแล้ว — login ไม่ได้)</h2><table id="t3"></table>
-<h2>🛠 สตูดิโออวATAR (อัปโหลด PNG)</h2>
-<p>วาดชิ้นส่วนเป็น PNG → เลือกชั้น → ตั้งชื่อ/ราคา → บันทึก — ตั้งราคา = ขึ้นร้านค้าให้ผู้ใช้ซื้อด้วยหัวใจ</p>
+<h2>🛠 สตูดิโออวตาร</h2>
+<p>อัปโหลด PNG โปร่งใสที่มีสัดส่วนเดียวกับตัวละคร เลือกเลเยอร์ ตั้งชื่อและราคา จากนั้นบันทึกเพื่อให้ผู้เล่นเลือกใช้ได้</p>
 <div class="srow">
   <select id="sType"><option value="b">🍜 ชาม</option><option value="c">👕 ตัว</option><option value="h">🙂 หัว</option><option value="f">😊 หน้า</option><option value="o">🎩 หมวก</option></select>
   <input id="sName" placeholder="ชื่อชิ้นส่วน" maxlength="30">
@@ -126,9 +165,14 @@ th{background:#241b14}td{background:#181512}.bad{color:#ff6e5c}
   <input type="file" id="sFile" accept="image/png,image/jpeg,image/webp" style="color:#e8e6f0">
 </div>
 <div id="sPreview" style="margin:10px 0"></div>
-<button id="sSave">💾 บันทึกชิ้นส่วน</button>
+<div id="sMode" style="font-size:12px;color:#bdb4d4;margin:8px 0">โหมด: เพิ่มชิ้นส่วนใหม่</div>
+<button id="sSave">💾 บันทึกชิ้นส่วน</button> <button id="sCancelEdit" type="button" style="display:none">ยกเลิกแก้ไข</button>
 <div id="sErr"></div>
+<h2>👗 พรีวิวการแต่งตัว</h2>
+<p class="outfit-help">กด <b>พรีวิว</b> บนชิ้นส่วนเพื่อสลับชิ้นในเลเยอร์นั้น — ตัวละครหลักอยู่หลังสุดเสมอ</p>
+<div id="outfitPreview"></div>
 <h2>🧩 ชิ้นส่วนทั้งหมด</h2>
+<div id="partsTabs"></div>
 <div id="partsList"></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -187,13 +231,14 @@ async function unban(sub){await call('/admin/unban',{sub});}
 // ── สตูดิโอวาดชุด (พรีวิว sprite + วาด 16×16) ──
 const shade=(hex,f)=>{const n=parseInt(hex.slice(1),16);return 'rgb('+Math.round(((n>>16)&255)*f)+','+Math.round(((n>>8)&255)*f)+','+Math.round((n&255)*f)+')'};
 const SMAPS={
-  head:[".....HHHHHH.....","...HHHHHHHHHH...","..HHHHHHHHHHHH..","..HHHHHHHHHHHH..","..HHFFFFFFFFHH..",".HHFFFFFFFFFFHH.",".HHFFFFFFFFFFHH.","...FFFFFFFFFF..."],
+  head:[".....HHHHHH.....","...HHHHHHHHHH...","..HHHHHHHHHHHH..","..HHHHHHHHHHHH..","..HH........HH..",".HH..........HH.",".HH..........HH.","................"],
   face:[".....E....E.....",".......M........"],
   body:["....CCCCCCCC....","...CCCCCCCCCC...","...CCCCCCCCCC...","...CCCCCCCCCC...","....CCCCCCCC...."],
   bowl:["....BBBBBBBB....","..BBBBBBBBBBBB..","..BBBBBBBBBBBB.."],
   chef:[".....OOOOOO.....","....OOOOOOOO....","....OOOOOOOO....","....OOOOOOOO...."],
 };
 const SCOLS={b:'#5b7fa6',c:'#e8e6f0',h:'#3a2a20',f:'#3a2a20',o:'#ffffff'};
+let EDITING=null,EDIT_PARTS=[],OUTFIT={},PART_TAB='all';
 document.getElementById('sFile').addEventListener('change',(e)=>{
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=()=>{
@@ -206,28 +251,64 @@ async function sSave(){
   const err=document.getElementById('sErr');
   const file=document.getElementById('sFile').files[0];
   if(!name)return err.textContent='ใส่ชื่อชิ้นส่วนก่อน';
-  if(!file)return err.textContent='เลือกรูป PNG ก่อน';
+  if(!file&&!EDITING)return err.textContent='เลือกรูป PNG ก่อน';
   if(!tok())return err.textContent='ต้องใส่ ADMIN_TOKEN ก่อน';
   const fd=new FormData();
-  fd.append('type',type);fd.append('name',name);fd.append('price',price);fd.append('img',file);
-  const r=await fetch('/parts',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
+  fd.append('name',name);fd.append('price',price);
+  if(EDITING)fd.append('id',EDITING);else fd.append('type',type);
+  if(file)fd.append('img',file);
+  const r=await fetch(EDITING?'/parts/update':'/parts',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
   const d=await r.json();
   if(!r.ok)return err.textContent='❌ '+(d.error||'fail');
-  err.textContent='✅ บันทึกแล้ว id='+d.id+(price?' — ขึ้นร้านค้าแล้ว 🛒':' — ทุกคนใช้ฟรี');
-  document.getElementById('sFile').value='';
-  document.getElementById('sPreview').innerHTML='';
+  err.textContent='✅ '+(EDITING?'แก้ไข':'บันทึก')+'แล้ว id='+d.id+(price?' — ขึ้นร้านค้าแล้ว 🛒':' — ทุกคนใช้ฟรี');
+  cancelEdit(false);
   refreshParts();
 }
+function editPart(id){
+  const p=EDIT_PARTS.find(x=>x.id===id);if(!p)return;
+  EDITING=id;
+  document.getElementById('sType').value=p.type;document.getElementById('sType').disabled=true;
+  document.getElementById('sName').value=p.name;document.getElementById('sPrice').value=p.price||'';
+  document.getElementById('sPreview').innerHTML='<img src="'+esc(p.png)+'?v='+Date.now()+'" style="width:128px;height:128px;image-rendering:pixelated;border:2px solid #5a4a3a">';
+  document.getElementById('sMode').textContent='โหมด: แก้ไข '+p.id+' — เปลี่ยน PNG ได้ หรือปล่อยว่างเพื่อใช้รูปเดิม';
+  document.getElementById('sSave').textContent='💾 บันทึกการแก้ไข';document.getElementById('sCancelEdit').style.display='inline-block';
+  document.getElementById('sName').focus();
+}
+function cancelEdit(clear=true){
+  EDITING=null;document.getElementById('sType').disabled=false;
+  document.getElementById('sMode').textContent='โหมด: เพิ่มชิ้นส่วนใหม่';document.getElementById('sSave').textContent='💾 บันทึกชิ้นส่วน';document.getElementById('sCancelEdit').style.display='none';
+  document.getElementById('sFile').value='';document.getElementById('sPreview').innerHTML='';
+  if(clear){document.getElementById('sName').value='';document.getElementById('sPrice').value='';}
+}
+document.getElementById('sCancelEdit').addEventListener('click',()=>cancelEdit());
 async function refreshParts(){
   const r=await fetch('/parts');
   const d=await r.json();
   const list=document.getElementById('partsList');list.innerHTML='';
   const arr=d.parts||[];
+  EDIT_PARTS=arr;
+  const tabLabels={all:'ทั้งหมด',b:'🍜 ชาม',c:'👕 ตัว',h:'🙂 หัว',f:'😊 หน้า',o:'🎩 หมวก'};
+  const tabs=document.getElementById('partsTabs');
+  tabs.innerHTML=Object.entries(tabLabels).map(([type,label])=>'<button class="'+(PART_TAB===type?'on':'')+'" data-type="'+type+'">'+label+' ('+(type==='all'?arr.length:arr.filter(p=>p.type===type).length)+')</button>').join('');
+  tabs.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{PART_TAB=button.dataset.type;refreshParts();}));
+  ['b','c','h','f','o'].forEach(type=>{if(!OUTFIT[type]||!arr.some(p=>p.id===OUTFIT[type])){const latest=arr.filter(p=>p.type===type).at(-1);OUTFIT[type]=latest?latest.id:'';}});
+  renderOutfitPreview();
   if(!arr.length){list.innerHTML='<div class="msg2">ยังไม่มีชิ้นส่วนวาดเอง</div>';return}
-  arr.forEach(p=>{const div=document.createElement('div');div.className='msg2';
-    div.innerHTML=esc(p.id)+' · '+esc(p.name)+' · ชั้น '+p.type+' · '+(p.price?p.price+' 💗':'ฟรี');
-    const b=document.createElement('button');b.textContent='ลบ';b.style.marginLeft='8px';b.addEventListener('click',()=>delPart(p.id));
-    div.appendChild(b);list.appendChild(div);});
+  const cacheBust=Date.now();
+  const shown=PART_TAB==='all'?arr:arr.filter(p=>p.type===PART_TAB);
+  if(!shown.length){list.innerHTML='<div class="msg2">ยังไม่มีชิ้นส่วนในแท็บนี้</div>';return}
+  shown.forEach(p=>{const div=document.createElement('div');div.className='part-item';
+    div.innerHTML='<img src="'+esc(p.png)+'?v='+cacheBust+'" alt=""><div class="part-meta"><b>'+esc(p.name)+'</b><span>ID '+esc(p.id)+' · ชั้น '+esc(p.type)+' · '+(p.price?p.price+' 💗':'ฟรี')+'</span></div>';
+    const preview=document.createElement('button');preview.className='preview';preview.textContent='พรีวิว';preview.style.marginLeft='auto';preview.addEventListener('click',()=>{OUTFIT[p.type]=p.id;renderOutfitPreview();});
+    const edit=document.createElement('button');edit.className='edit';edit.textContent='แก้ไข';edit.style.marginLeft='8px';edit.addEventListener('click',()=>editPart(p.id));
+    const b=document.createElement('button');b.className='delete';b.textContent='ลบ';b.style.marginLeft='8px';b.addEventListener('click',()=>delPart(p.id));
+    div.appendChild(preview);div.appendChild(edit);div.appendChild(b);list.appendChild(div);});
+}
+function renderOutfitPreview(){
+  const target=document.getElementById('outfitPreview');
+  const layers=['/simple/body.png'];
+  ['b','c','h','f','o'].forEach(type=>{const part=EDIT_PARTS.find(p=>p.id===OUTFIT[type]);if(part)layers.push(part.png+'?v='+Date.now());});
+  target.innerHTML='<div class="admin-avatar-stack">'+layers.map(src=>'<img src="'+esc(src)+'" alt="">').join('')+'</div>';
 }
 async function delPart(id){
   const r=await fetch('/parts/delete',{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify({id})});
@@ -269,6 +350,11 @@ function parseMultipart(buf, boundary) {
 
 // ---- state ----
 const messages = []; // [{id, name, text?, img?, time}]
+const posts = []; // [{id, name, text, time, expiresAt, comments: []}] — เก็บชั่วคราว ไม่เขียนลงดิสก์
+const matchQueue = new Map(); // sub -> {sub, name, tags, target, joinedAt}
+const randomRooms = new Map(); // id -> {id, users, prompt, expiresAt, messages, game}
+const OPENING_PROMPTS = ["ถ้าต้องกินเมนูเดิมได้ทุกวัน จะเลือกอะไร?", "เพลงที่กำลังวนฟังอยู่คือเพลงอะไร?", "ช่วงนี้มีเรื่องเล็ก ๆ อะไรที่ทำให้ยิ้มบ้าง?", "ถ้าพรุ่งนี้ว่างทั้งวัน อยากไปไหน?", "ของกินที่คนอื่นชอบ แต่เราไม่อินคืออะไร?"];
+const GAME_PROMPTS = ["มื้อดึกในอุดมคติคืออะไร?", "สิ่งแรกที่จะซื้อถ้ามีวันหยุดเพิ่ม 1 วัน?", "อีโมจิ 3 ตัวที่แทนวันนี้ของคุณ", "เมนูที่กินแล้วหายเหนื่อยที่สุด?"];
 
 // ---- ชื่อที่ถูกใช้อยู่ (จองชื่อกันซ้ำ) ----
 // ชื่อจะว่างอัตโนมัติเมื่อเจ้าของเงียบเกิน 60 วิ (เผื่อ background tab ที่ browser throttle timer)
@@ -312,6 +398,26 @@ setInterval(() => {
   }
 }, 30_000);
 
+// ฟีด "วันนี้": ลบทั้งโพสต์และคอมเมนต์เมื่อครบเวลา เพื่อไม่กินพื้นที่ host ฟรี
+const cleanPosts = () => {
+  const now = Date.now();
+  for (let i = posts.length - 1; i >= 0; i--) if (posts[i].expiresAt <= now) posts.splice(i, 1);
+};
+setInterval(cleanPosts, 60_000);
+
+const cleanMatching = () => {
+  const now = Date.now();
+  for (const [sub, item] of matchQueue) if (now - item.joinedAt > QUEUE_TTL_MS) matchQueue.delete(sub);
+  for (const [id, room] of randomRooms) if (room.expiresAt <= now) randomRooms.delete(id);
+};
+setInterval(cleanMatching, 60_000);
+const sharesInterest = (a, b) => a.tags.some((tag) => b.tags.includes(tag));
+const roomFor = (sub) => {
+  cleanMatching();
+  return [...randomRooms.values()].find((room) => room.users.some((u) => u.sub === sub));
+};
+const roomPublic = (room) => room && ({ id: room.id, users: room.users.map(({ name }) => ({ name })), prompt: room.prompt, expiresAt: room.expiresAt, messages: room.messages, game: room.game });
+
 // เก็บข้อความลง memory (ตัดส่วนเกิน + ลบไฟล์ของข้อความรูป/เสียงที่หลุดวง)
 const pushMessage = (msg) => {
   messages.push(msg);
@@ -327,6 +433,30 @@ const json = (res, status, obj) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(obj));
 };
+
+// Rate limit แบบ in-memory: พอสำหรับกันลองของ/ยิงบอทที่ชั้นแอป (ควรเสริม WAF ของ Fly/Cloudflare หากโตขึ้น)
+const rateBuckets = new Map();
+function clientIp(req) {
+  const forwarded = TRUST_PROXY ? String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() : "";
+  return forwarded || req.socket.remoteAddress || "unknown";
+}
+function allowRequest(req, limit, windowMs = 60_000) {
+  const key = `${clientIp(req)}:${limit}`;
+  const now = Date.now();
+  const bucket = rateBuckets.get(key) || [];
+  const fresh = bucket.filter((at) => now - at < windowMs);
+  if (fresh.length >= limit) return false;
+  fresh.push(now);
+  rateBuckets.set(key, fresh);
+  return true;
+}
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [key, times] of rateBuckets) {
+    const fresh = times.filter((at) => at >= cutoff);
+    if (fresh.length) rateBuckets.set(key, fresh); else rateBuckets.delete(key);
+  }
+}, 60_000).unref();
 
 // ---- Google login: ตรวจสอบ ID token (JWT RS256) ด้วย crypto ในตัว ไม่พึ่ง library ----
 const sessions = new Map(); // sessionToken -> {sub, email, name} (restart แล้วต้อง login ใหม่)
@@ -446,6 +576,21 @@ async function verifyGoogleJwt(token, opts = {}) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const method = req.method;
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), geolocation=(), payment=()");
+  res.setHeader("X-Frame-Options", "DENY");
+  if (url.pathname === "/" || url.pathname === "/admin") {
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'");
+  }
+
+  const isStatic = method === "GET" && (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/uploads/") || url.pathname.startsWith("/avatars/") || url.pathname === "/simple/body.png");
+  const rateLimit = url.pathname === "/google-login" ? 20 : (url.pathname === "/upload" ? 10 : ((method === "POST" && url.pathname.startsWith("/parts")) ? 20 : (method === "GET" ? 180 : 100)));
+  if (!isStatic && !allowRequest(req, rateLimit)) {
+    res.setHeader("Retry-After", "60");
+    json(res, 429, { error: "ส่งคำขอถี่เกินไป กรุณารอสักครู่" });
+    return;
+  }
 
   // หน้า UI — ใส่ GOOGLE_CLIENT_ID ลงไปใน index.html ตอนเสิร์ฟ (ไม่ต้องแก้ไฟล์)
   if (method === "GET" && url.pathname === "/") {
@@ -494,17 +639,136 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ตัวละครหลักชั่วคราวหนึ่งเลเยอร์; เลเยอร์แต่งตัวจะเพิ่มภายหลัง
+  if (method === "GET" && url.pathname === "/simple/body.png") {
+    fs.readFile(path.join(__dirname, "simple", "body.png"), (err, data) => {
+      if (err) { res.writeHead(404); res.end("not found"); return; }
+      res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
+      res.end(data);
+    });
+    return;
+  }
+
   // ดึงข้อความทั้งหมด (client poll ทุก 1.5 วิ) — ส่ง ?name=xxx มาด้วยเพื่อเป็น heartbeat ยืนยันว่ายังอยู่
   if (method === "GET" && url.pathname === "/messages") {
-    touch(url.searchParams.get("name"));
+    // ห้ามให้ client เลือกชื่อ heartbeat เอง ไม่งั้นใช้ปลอมการออนไลน์ของคนอื่นได้
+    const session = sessions.get(String(url.searchParams.get("session") || ""));
+    const identity = session && identities.get(session.sub);
+    if (identity?.nickname) touch(identity.nickname);
     json(res, 200, { messages });
+    return;
+  }
+
+  // ฟีดชั่วคราว: เก็บเฉพาะ 24 ชั่วโมงล่าสุดใน memory (restart ก็หายด้วย)
+  if (method === "GET" && url.pathname === "/posts") {
+    cleanPosts();
+    json(res, 200, { posts: [...posts].sort((a, b) => b.time - a.time) });
+    return;
+  }
+
+  if (method === "POST" && (url.pathname === "/posts" || url.pathname === "/posts/comment")) {
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
+    let data;
+    try { data = JSON.parse(body); } catch { json(res, 400, { error: "invalid json" }); return; }
+    const sess = sessions.get(String(data.session || ""));
+    if (!sess) { json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" }); return; }
+    if (banned.has(sess.sub)) { json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" }); return; }
+    const identity = identities.get(sess.sub);
+    const name = String(data.name || "").trim().slice(0, 50);
+    if (!identity || !name || identity.nickname !== name) { json(res, 401, { error: "ต้องจองชื่อก่อน" }); return; }
+    const text = String(data.text || "").trim().slice(0, url.pathname === "/posts" ? MAX_POST_TEXT : MAX_COMMENT_TEXT);
+    if (!text) { json(res, 400, { error: "ข้อความว่างไม่ได้" }); return; }
+    cleanPosts();
+    if (url.pathname === "/posts") {
+      const now = Date.now();
+      posts.unshift({ id: `${now}-${Math.random().toString(36).slice(2, 7)}`, name, text, time: now, expiresAt: now + POST_TTL_MS, comments: [] });
+      if (posts.length > MAX_POSTS) posts.length = MAX_POSTS;
+      json(res, 200, { ok: true });
+      return;
+    }
+    const post = posts.find((p) => p.id === String(data.postId || ""));
+    if (!post) { json(res, 404, { error: "โพสต์นี้หมดอายุแล้ว" }); return; }
+    post.comments.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, text, time: Date.now() });
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // สุ่มโต๊ะ: ห้องไม่ถาวร, ใช้ interest ที่ทับกัน และเลือกได้ 2 หรือ 5 คน
+  if (url.pathname.startsWith("/match/")) {
+    let body = "";
+    try { if (method === "POST") body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
+    let data = {};
+    try { if (body) data = JSON.parse(body); } catch { json(res, 400, { error: "invalid json" }); return; }
+    const session = method === "GET" ? url.searchParams.get("session") : data.session;
+    const sess = sessions.get(String(session || ""));
+    if (!sess) { json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" }); return; }
+    if (banned.has(sess.sub)) { json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" }); return; }
+    const identity = identities.get(sess.sub);
+    if (!identity || !identity.nickname) { json(res, 401, { error: "ต้องจองชื่อก่อน" }); return; }
+    cleanMatching();
+
+    if (method === "GET" && url.pathname === "/match/status") {
+      const room = roomFor(sess.sub), waiting = matchQueue.get(sess.sub);
+      json(res, 200, { room: roomPublic(room), waiting: waiting ? { target: waiting.target, tags: waiting.tags, joinedAt: waiting.joinedAt } : null });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/match/leave") {
+      matchQueue.delete(sess.sub);
+      const room = roomFor(sess.sub);
+      if (room) {
+        room.users = room.users.filter((u) => u.sub !== sess.sub);
+        if (room.users.length < 2) randomRooms.delete(room.id);
+        else if (room.game && room.game.answers.length >= room.users.length) room.game.done = true;
+      }
+      json(res, 200, { ok: true });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/match/join") {
+      if (roomFor(sess.sub)) { json(res, 409, { error: "คุณอยู่ในโต๊ะแล้ว" }); return; }
+      const target = Number(data.target);
+      const tags = [...new Set((Array.isArray(data.tags) ? data.tags : []).map((v) => String(v).trim()).filter((v) => /^[\p{L}\p{N} -]{1,20}$/u.test(v)))].slice(0, 3);
+      if (![2, 5].includes(target) || !tags.length) { json(res, 400, { error: "เลือกความสนใจอย่างน้อย 1 อย่าง และจำนวนคน 2 หรือ 5 คน" }); return; }
+      const me = { sub: sess.sub, name: identity.nickname, tags, target, joinedAt: Date.now() };
+      matchQueue.set(sess.sub, me);
+      const candidates = [...matchQueue.values()].filter((item) => item.target === target && item.sub !== me.sub && sharesInterest(me, item)).sort((a, b) => a.joinedAt - b.joinedAt);
+      if (candidates.length >= target - 1) {
+        const users = [me, ...candidates.slice(0, target - 1)];
+        const room = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, users: users.map(({ sub, name }) => ({ sub, name })), prompt: OPENING_PROMPTS[Math.floor(Math.random() * OPENING_PROMPTS.length)], expiresAt: Date.now() + ROOM_TTL_MS, messages: [], game: null };
+        users.forEach((u) => matchQueue.delete(u.sub));
+        randomRooms.set(room.id, room);
+        json(res, 200, { ok: true, room: roomPublic(room) });
+      } else json(res, 200, { ok: true, waiting: true });
+      return;
+    }
+    const room = roomFor(sess.sub);
+    if (!room) { json(res, 404, { error: "ยังไม่มีโต๊ะ หรือโต๊ะหมดเวลาแล้ว" }); return; }
+    if (method === "POST" && url.pathname === "/match/send") {
+      const text = String(data.text || "").trim().slice(0, MAX_ROOM_TEXT);
+      if (!text) { json(res, 400, { error: "ข้อความว่างไม่ได้" }); return; }
+      room.messages.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: identity.nickname, text, time: Date.now() });
+      if (room.messages.length > 120) room.messages.splice(0, room.messages.length - 120);
+      json(res, 200, { ok: true });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/match/game") {
+      if (!room.game || room.game.done) room.game = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, prompt: GAME_PROMPTS[Math.floor(Math.random() * GAME_PROMPTS.length)], answers: [], done: false };
+      const answer = String(data.answer || "").trim().slice(0, 280);
+      if (!answer) { json(res, 200, { ok: true, room: roomPublic(room) }); return; }
+      room.game.answers = room.game.answers.filter((a) => a.sub !== sess.sub);
+      room.game.answers.push({ sub: sess.sub, name: identity.nickname, text: answer });
+      if (room.game.answers.length >= room.users.length) room.game.done = true;
+      json(res, 200, { ok: true, room: roomPublic(room) });
+      return;
+    }
+    json(res, 404, { error: "not found" });
     return;
   }
 
   // เข้าสู่ระบบด้วย Google — รับ ID token มาตรวจสอบ แล้วคืน session ของเราเอง (เก็บใน localStorage)
   if (method === "POST" && url.pathname === "/google-login") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 32 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -538,8 +802,8 @@ const server = http.createServer(async (req, res) => {
 
   // จองชื่อก่อนเข้าแชท — ต้อง login Google แล้ว (session) ชื่อผูกกับบัญชี (gid): ซ้ำ/แย่งชื่อโดน 409
   if (method === "POST" && url.pathname === "/claim") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -638,16 +902,15 @@ const server = http.createServer(async (req, res) => {
     // parse multipart/form-data manually
     const boundary = req.headers["content-type"]?.match(/boundary=(.+)/)?.[1];
     if (!boundary) { json(res, 400, { error: "missing multipart boundary" }); return; }
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const buf = Buffer.concat(chunks);
+    let buf;
+    try { buf = await readBody(req, MAX_ADMIN_UPLOAD_BYTES); } catch (e) { json(res, e.status || 400, { error: "file too large (max 2MB)" }); return; }
     const parts = parseMultipart(buf, boundary);
     const type = String(parts.type || "").trim();
     if (!"bchof".includes(type) || type.length !== 1) { json(res, 400, { error: "type ต้องเป็น b/c/h/f/o" }); return; }
     const name = String(parts.name || "").trim().slice(0, 30);
     if (!name) { json(res, 400, { error: "name required" }); return; }
     const price = Math.max(0, Math.min(1000, Math.round(Number(parts.price) || 0)));
-    if (!parts.img || !parts.img.data) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG" }); return; }
+    if (!parts.img || !parts.img.data || !hasExpectedFileSignature(parts.img.data, "png")) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG ที่ถูกต้อง" }); return; }
     // id ถัดไปของ type นี้
     const used = new Set((TYPE_IDS[type] || []).map((n) => type + n));
     customParts.forEach((p) => p.type === type && used.add(p.id));
@@ -665,14 +928,42 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, { ok: true, id: part.id });
     return;
   }
+  // แก้ชื่อ/ราคา และแทนที่ PNG ของชิ้นส่วนเดิมได้ โดยคง id และเลเยอร์ไว้
+  if (method === "POST" && url.pathname === "/parts/update") {
+    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
+      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
+      return;
+    }
+    const boundary = req.headers["content-type"]?.match(/boundary=(.+)/)?.[1];
+    if (!boundary) { json(res, 400, { error: "missing multipart boundary" }); return; }
+    let uploadBuf;
+    try { uploadBuf = await readBody(req, MAX_ADMIN_UPLOAD_BYTES); } catch (e) { json(res, e.status || 400, { error: "file too large (max 2MB)" }); return; }
+    const form = parseMultipart(uploadBuf, boundary);
+    const id = String(form.id || "").trim();
+    const part = customParts.find((item) => item.id === id);
+    if (!part) { json(res, 404, { error: "ไม่พบชิ้นส่วน" }); return; }
+    const name = String(form.name || "").trim().slice(0, 30);
+    if (!name) { json(res, 400, { error: "name required" }); return; }
+    const price = Math.max(0, Math.min(1000, Math.round(Number(form.price) || 0)));
+    part.name = name;
+    part.price = price;
+    if (form.img?.data?.length) {
+      if (!hasExpectedFileSignature(form.img.data, "png")) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG ที่ถูกต้อง" }); return; }
+      const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[part.type];
+      fs.writeFileSync(path.join(__dirname, "avatars", layerDir, part.id + ".png"), form.img.data);
+    }
+    saveParts();
+    json(res, 200, { ok: true, id: part.id });
+    return;
+  }
   // ลบชิ้นส่วนวาดเอง (ผู้ดูแล) — อวตารที่ใส่ชิ้นส่วนนี้จะคืนเป็นชุดฟรีอัตโนมัติ
   if (method === "POST" && url.pathname === "/parts/delete") {
     if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
       json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
       return;
     }
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -706,8 +997,8 @@ const server = http.createServer(async (req, res) => {
   }
   // ซื้อชิ้นส่วนอวตารด้วยหัวใจ — เพิ่มเข้าคลัง (owned) เก็บถาวรใน identities.json
   if (method === "POST" && url.pathname === "/shop/buy") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -736,8 +1027,8 @@ const server = http.createServer(async (req, res) => {
 
   // กดหัวใจให้เพื่อน — ให้ได้ 1 ครั้ง/วัน (ต่อคนที่ให้) หัวใจสะสมไว้กับบัญชีผู้รับ (แลกของในอนาคต)
   if (method === "POST" && url.pathname === "/heart") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -798,8 +1089,8 @@ const server = http.createServer(async (req, res) => {
 
   // ส่งข้อความตัวหนังสือ
   if (method === "POST" && url.pathname === "/send") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);
@@ -818,16 +1109,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     // input validation (trust boundary)
-    const name = String(data.name || "").trim().slice(0, 50);
+    const identity = identities.get(sessSend.sub);
+    const name = identity?.nickname || "";
     const text = String(data.text || "").trim().slice(0, MAX_TEXT);
     if (!name || !text) {
       json(res, 400, { error: "name and text required" });
       return;
     }
     touch(name);
-    // ถ้ายังไม่ได้จองชื่อ (ส่งตรงๆ) — ต่อ gid ให้ entry เพื่อให้ /users โชว์คะแนนถูก
-    const entSend = activeNames.get(name);
-    if (entSend && !entSend.gid) { entSend.gid = sessSend.sub; entSend.email = sessSend.email; entSend.realName = sessSend.name; }
+    // ชื่อมาจาก identity ของ session เท่านั้น — request ปลอมชื่อคนอื่นไม่ได้
     pushMessage({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), name, text, time: Date.now() });
     const pt = addPoints(sessSend.sub, 2, "msg"); // ส่งข้อความ = +2 แต้ม (ถ้าไม่สแปม/ไม่เต็มโควต้า)
     json(res, 200, { ok: true, rewarded: pt.awarded, dayLeft: pt.dayLeft });
@@ -836,8 +1126,8 @@ const server = http.createServer(async (req, res) => {
 
   // อัปโหลดรูป (ส่งเป็น base64 ใน JSON — ไม่ต้อง parse multipart ให้ยุ่งยาก)
   if (method === "POST" && url.pathname === "/upload") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, MAX_JSON_BYTES)).toString(); } catch (e) { json(res, e.status || 400, { error: "file too large (max 5MB)" }); return; }
     if (body.length > MAX_IMG_BYTES * 1.4 + 512) {
       // base64 ยาวกว่าไฟล์จริง ~33% — ตัดตั้งแต่ต้นถ้าเกิน
       json(res, 413, { error: "file too large (max 5MB)" });
@@ -860,7 +1150,8 @@ const server = http.createServer(async (req, res) => {
       json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" });
       return;
     }
-    const name = String(data.name || "").trim().slice(0, 50);
+    const identity = identities.get(sessUp.sub);
+    const name = identity?.nickname || "";
     const ext = String(data.ext || "").toLowerCase();
     const isVoice = data.kind === "voice";
     const exts = isVoice ? AUDIO_EXT : IMG_EXT; // รูป = jpg/png/gif/webp, เสียง = webm/m4a/mp3
@@ -878,10 +1169,11 @@ const server = http.createServer(async (req, res) => {
       json(res, 413, { error: "file too large (max 5MB)" });
       return;
     }
+    if (!hasExpectedFileSignature(buf, ext)) {
+      json(res, 400, { error: "file content does not match its type" });
+      return;
+    }
     touch(name);
-    // ถ้ายังไม่ได้จองชื่อ (ส่งตรงๆ) — ต่อ gid ให้ entry เพื่อให้ /users โชว์คะแนนถูก
-    const entUp = activeNames.get(name);
-    if (entUp && !entUp.gid) { entUp.gid = sessUp.sub; entUp.email = sessUp.email; entUp.realName = sessUp.name; }
     // ชื่อไฟล์เราสร้างเองทั้งหมด — ไม่เอา filename จาก user (กัน disguised file)
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, filename), buf);
@@ -915,8 +1207,8 @@ const server = http.createServer(async (req, res) => {
       json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
       return;
     }
-    let body = "";
-    for await (const chunk of req) body += chunk;
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
     try {
       data = JSON.parse(body);

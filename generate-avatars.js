@@ -15,10 +15,10 @@ const MAPS = {
     "...HHHHHHHHHH...",
     "..HHHHHHHHHHHH..",
     "..HHHHHHHHHHHH..",
-    "..HHFFFFFFFFHH..",
-    ".HHFFFFFFFFFFHH.",
-    ".HHFFFFFFFFFFHH.",
-    "...FFFFFFFFFF...",
+    "..HH........HH..",
+    ".HH..........HH.",
+    ".HH..........HH.",
+    "................",
   ],
   body: [
     "....CCCCCCCC....",
@@ -129,8 +129,6 @@ for (const [type, info] of Object.entries(PARTS)) {
       const charKey = charMap[type];
       mapLines = MAPS[TYPE_DIR[type]];
       colorMap = { [charKey]: variant.c };
-      // head ต้องมี F (ผิว) ด้วย
-      if (type === "h") colorMap["F"] = "#f2c9a0";
       // face ต้องมี M (ปาก) ด้วย
       if (type === "f") colorMap["M"] = "#7a4a30";
     }
