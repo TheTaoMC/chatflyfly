@@ -582,7 +582,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Permissions-Policy", "camera=(), geolocation=(), payment=()");
   res.setHeader("X-Frame-Options", "DENY");
   if (url.pathname === "/" || url.pathname === "/admin") {
-    res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
+    res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
   }
 
   const isStatic = method === "GET" && (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/uploads/") || url.pathname.startsWith("/avatars/") || url.pathname === "/simple/body.png");
