@@ -62,12 +62,15 @@ const SHOP_ITEMS = [
 // ต้องสร้าง OAuth Client ID (Web application) ที่ console.cloud.google.com แล้วใส่ env:
 //   GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 // ผู้ใช้ต้อง login ด้วย Google ก่อนถึงจะจองชื่อ/ส่งข้อความได้ — แต่ในแชทใช้ชื่อเล่น (ไร้ตัวตน)
-// email + ชื่อจริง เก็บไว้หลังบ้านใน identities.json สำหรับผู้ดูแลเท่านั้น (ดู /admin)
+// email + ชื่อจริงเก็บไว้หลังบ้านใน Supabase สำหรับผู้ดูแลเท่านั้น (ดู /admin)
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_JWKS_URL = process.env.GOOGLE_JWKS_URL || "https://www.googleapis.com/oauth2/v3/certs"; // เปลี่ยนได้ตอนทดสอบ local
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ""; // token หน้า/API ผู้ดูแล — ถ้าไม่ตั้ง = ปิดไม่ให้เข้าถึง
 const IDENTITIES_FILE = process.env.IDENTITIES_FILE || path.join(__dirname, "identities.json"); // หลังบ้าน (เก็บถาวร)
 const BANNED_FILE = process.env.BANNED_FILE || path.join(__dirname, "banned.json"); // blocklist (sub ของ Google)
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
+const SUPABASE_STATE_TABLE = process.env.SUPABASE_STATE_TABLE || "app_state";
 const SUPPORT_PAYMENT_LINK = process.env.SUPPORT_PAYMENT_LINK || "https://buy.stripe.com/8x2bJ3a3P7IOef2fsHbsc00";
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_PAYMENT_LINK_ID = process.env.STRIPE_PAYMENT_LINK_ID || ""; // plink_... (ไม่บังคับ แต่ช่วยล็อกให้รับเฉพาะลิงก์นี้)
@@ -483,17 +486,94 @@ setInterval(() => {
 
 // ---- Google login: ตรวจสอบ ID token (JWT RS256) ด้วย crypto ในตัว ไม่พึ่ง library ----
 const sessions = new Map(); // sessionToken -> {sub, email, name} (restart แล้วต้อง login ใหม่)
-const identities = new Map(); // sub -> {sub, email, name, firstSeen, lastSeen} — เก็บถาวรใน identities.json (หลังบ้าน)
-function loadIdentities() {
+const identities = new Map(); // sub -> identity; production เก็บใน Supabase
+const banned = new Map(); // sub -> {sub, email, name, reason, bannedAt}
+const useSupabase = !!(SUPABASE_URL && SUPABASE_SECRET_KEY);
+let stateWriteTail = Promise.resolve();
+
+function readLocalState(file) {
+  if (!fs.existsSync(file)) return [];
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!Array.isArray(data)) throw new Error(`${path.basename(file)} must contain an array`);
+  return data;
+}
+
+function writeLocalState(file, data) {
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(data, null, 2));
+  fs.renameSync(temp, file);
+}
+
+function supabaseEndpoint(id, upsert = false) {
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(SUPABASE_STATE_TABLE)) throw new Error("invalid SUPABASE_STATE_TABLE");
+  const base = new URL(SUPABASE_URL);
+  if (base.protocol !== "https:" && !["127.0.0.1", "localhost"].includes(base.hostname)) throw new Error("SUPABASE_URL must use https");
+  const endpoint = new URL(`/rest/v1/${SUPABASE_STATE_TABLE}`, base);
+  if (upsert) endpoint.searchParams.set("on_conflict", "id");
+  else {
+    endpoint.searchParams.set("id", `eq.${id}`);
+    endpoint.searchParams.set("select", "data");
+  }
+  return endpoint;
+}
+
+async function readSupabaseState(id) {
+  const response = await fetch(supabaseEndpoint(id), { headers: { apikey: SUPABASE_SECRET_KEY } });
+  if (!response.ok) throw new Error(`Supabase read ${id} failed (${response.status})`);
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length !== 1 || !Array.isArray(rows[0].data)) throw new Error(`Supabase row ${id} is missing or invalid`);
+  return rows[0].data;
+}
+
+async function writeSupabaseState(id, data) {
+  const response = await fetch(supabaseEndpoint(id, true), {
+    method: "POST",
+    headers: { apikey: SUPABASE_SECRET_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ id, data, updated_at: new Date().toISOString() }),
+  });
+  if (!response.ok) throw new Error(`Supabase write ${id} failed (${response.status})`);
+}
+
+function queueSupabaseWrite(id, data) {
+  const snapshot = JSON.parse(JSON.stringify(data));
+  const job = stateWriteTail.then(() => writeSupabaseState(id, snapshot));
+  stateWriteTail = job.catch(() => {});
+  return job;
+}
+
+async function initializeState() {
+  if (!!SUPABASE_URL !== !!SUPABASE_SECRET_KEY) throw new Error("ต้องตั้ง SUPABASE_URL และ SUPABASE_SECRET_KEY ให้ครบคู่");
+  const [identityRows, bannedRows] = useSupabase
+    ? await Promise.all([readSupabaseState("identities"), readSupabaseState("banned")])
+    : [readLocalState(IDENTITIES_FILE), readLocalState(BANNED_FILE)];
+  identityRows.forEach((item) => item?.sub && identities.set(item.sub, item));
+  bannedRows.forEach((item) => item?.sub && banned.set(item.sub, item));
+}
+
+async function saveIdentities() {
+  const data = [...identities.values()];
+  if (useSupabase) return queueSupabaseWrite("identities", data);
+  writeLocalState(IDENTITIES_FILE, data);
+}
+
+async function saveBanned() {
+  const data = [...banned.values()];
+  if (useSupabase) return queueSupabaseWrite("banned", data);
+  writeLocalState(BANNED_FILE, data);
+}
+
+const ready = initializeState();
+
+async function persistOr503(res, operation) {
   try {
-    const arr = JSON.parse(fs.readFileSync(IDENTITIES_FILE, "utf8"));
-    (Array.isArray(arr) ? arr : []).forEach((i) => i && i.sub && identities.set(i.sub, i));
-  } catch { /* ยังไม่มีไฟล์ */ }
+    await operation;
+    return true;
+  } catch (error) {
+    console.error("บันทึกข้อมูลถาวรไม่สำเร็จ:", error.message);
+    json(res, 503, { error: "บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
+    return false;
+  }
 }
-function saveIdentities() {
-  try { fs.writeFileSync(IDENTITIES_FILE, JSON.stringify([...identities.values()], null, 2)); } catch { /* ไม่ fatal */ }
-}
-loadIdentities();
 
 // ponytail: จำนวนสมาชิกยังเล็ก จึง scan Map ตามชื่อเล่นแทนการมี index ชุดที่สองซึ่งเสี่ยงค้างตอนเปลี่ยนชื่อ
 // ข้อจำกัดคือ O(n) ต่อชื่อ; ถ้าสมาชิกโตมากค่อยเพิ่ม nickname -> sub index และอัปเดตใน /claim
@@ -515,18 +595,7 @@ function validStripeSignature(rawBody, header, now = Date.now()) {
   });
 }
 
-// ---- Blocklist (ban) — ใช้ sub ของ Google เป็นกุญแจ เก็บใน banned.json ----
-const banned = new Map(); // sub -> {sub, email, name, reason, bannedAt}
-function loadBanned() {
-  try {
-    const arr = JSON.parse(fs.readFileSync(BANNED_FILE, "utf8"));
-    (Array.isArray(arr) ? arr : []).forEach((b) => b && b.sub && banned.set(b.sub, b));
-  } catch { /* ยังไม่มีไฟล์ */ }
-}
-function saveBanned() {
-  try { fs.writeFileSync(BANNED_FILE, JSON.stringify([...banned.values()], null, 2)); } catch { /* ไม่ fatal */ }
-}
-loadBanned();
+// ---- Blocklist (ban) — ใช้ sub ของ Google เป็นกุญแจ ----
 
 // ---- คะแนน + เลเวล (นักชิมมือใหม่ → ปรมาจารย์ราเมง) ----
 // กิจกรรมทุกอย่างให้คะแนน เก็บใน identities (ถาวรข้าม restart) — เลเวลคำนวณจากคะแนน
@@ -544,7 +613,7 @@ const LEVELS = [
 const POINT_COOLDOWN_MS = Number(process.env.POINT_COOLDOWN_MS) || 5000; // ส่งถี่แค่ไหน ข้อความขึ้น แต่คะแนนให้ทุก 5 วิ
 const DAILY_POINT_CAP = Number(process.env.DAILY_POINT_CAP) || 100; // วันละ 100 แต้ม/คน → ถึงขั้นสูงสุดต้อง ~8 วัน
 const levelFor = (points) => { let lv = LEVELS[0]; for (const l of LEVELS) if (points >= l.min) lv = l; return lv; };
-const addPoints = (sub, n, kind) => {
+const addPoints = async (sub, n, kind) => {
   if (!sub) return { awarded: false };
   const now = Date.now();
   const day = Math.floor(now / 86400000); // เปลี่ยนวัน = reset โควต้า
@@ -554,16 +623,16 @@ const addPoints = (sub, n, kind) => {
   else if (kind === "voice") id.voiceCount = (id.voiceCount || 0) + 1;
   else if (kind === "img") id.imgCount = (id.imgCount || 0) + 1;
   // 1) cooldown — ส่งถี่เกินไปในรอบนี้ ไม่ได้คะแนน (ข้อความยังขึ้นปกติ)
-  if (id.lastPointAt && now - id.lastPointAt < POINT_COOLDOWN_MS) { identities.set(sub, id); saveIdentities(); return { awarded: false, cooldown: true }; }
+  if (id.lastPointAt && now - id.lastPointAt < POINT_COOLDOWN_MS) { identities.set(sub, id); await saveIdentities(); return { awarded: false, cooldown: true }; }
   if (id.pointDay !== day) { id.pointDay = day; id.dayPoints = 0; }
   // 2) โควต้าวันนี้เต็ม — ไม่ได้คะแนนเพิ่มจนกว่าจะเปลี่ยนวัน
-  if ((id.dayPoints || 0) >= DAILY_POINT_CAP) { identities.set(sub, id); saveIdentities(); return { awarded: false, capped: true, dayLeft: 0 }; }
+  if ((id.dayPoints || 0) >= DAILY_POINT_CAP) { identities.set(sub, id); await saveIdentities(); return { awarded: false, capped: true, dayLeft: 0 }; }
   id.points = (id.points || 0) + n;
   id.dayPoints = (id.dayPoints || 0) + n;
   id.lastPointAt = now;
   id.lastSeen = now;
   identities.set(sub, id);
-  saveIdentities();
+  await saveIdentities();
   return { awarded: true, dayLeft: Math.max(0, DAILY_POINT_CAP - id.dayPoints) };
 };
 
@@ -624,6 +693,11 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), geolocation=(), payment=()");
   res.setHeader("X-Frame-Options", "DENY");
+  try { await ready; } catch (error) {
+    console.error("โหลดฐานข้อมูลไม่สำเร็จ:", error.message);
+    json(res, 503, { error: "ฐานข้อมูลยังไม่พร้อม" });
+    return;
+  }
   if (url.pathname === "/" || url.pathname === "/admin") {
     res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
   }
@@ -838,7 +912,7 @@ const server = http.createServer(async (req, res) => {
     id.name = r.name || "";
     id.lastSeen = Date.now();
     identities.set(r.sub, id);
-    saveIdentities();
+    if (!(await persistOr503(res, saveIdentities()))) return;
     // คืน nickname ที่เคยตั้งไว้กับบัญชีนี้ (ถ้ามี) — login รอบหน้าจะได้ไม่ต้องตั้งชื่อใหม่
     json(res, 200, { ok: true, token, name: id.name, email: id.email, nickname: id.nickname || "" });
     return;
@@ -866,7 +940,7 @@ const server = http.createServer(async (req, res) => {
     if (!/^[A-Za-z0-9_-]{20,100}$/.test(id.supportRef || "")) id.supportRef = crypto.randomBytes(24).toString("base64url");
     id.lastSeen = Date.now();
     identities.set(sess.sub, id);
-    saveIdentities();
+    if (!(await persistOr503(res, saveIdentities()))) return;
     paymentUrl.searchParams.set("locked_prefilled_email", id.email);
     paymentUrl.searchParams.set("client_reference_id", id.supportRef);
     paymentUrl.searchParams.set("locale", "th");
@@ -890,14 +964,19 @@ const server = http.createServer(async (req, res) => {
       && String(checkout.currency || "").toLowerCase() === "thb"
       && Number.isSafeInteger(checkout.amount_total) && checkout.amount_total >= SUPPORT_MIN_AMOUNT
       && (!STRIPE_PAYMENT_LINK_ID || checkout.payment_link === STRIPE_PAYMENT_LINK_ID);
-    const id = validPayment ? [...identities.values()].find((item) => item.supportRef === ref) : null;
+    const paidEmail = String(checkout.customer_details?.email || checkout.customer_email || "").trim().toLowerCase();
+    let id = validPayment ? [...identities.values()].find((item) => item.supportRef === ref) : null;
+    // รายการเก่าบางรายการไม่มี reference ที่ตรงแล้ว จึงกู้ด้วยอีเมลที่ Stripe ยืนยันจากรายการชำระเงิน
+    if (!id && validPayment && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paidEmail)) {
+      id = [...identities.values()].find((item) => String(item.email || "").trim().toLowerCase() === paidEmail) || null;
+    }
     if (!id) { json(res, 200, { received: true, granted: false }); return; }
     id.supporter = true;
     id.supporterSince ||= Date.now();
     id.stripeSessionId = String(checkout.id || "").slice(0, 255);
     id.supportAmount = Math.max(id.supportAmount || 0, checkout.amount_total);
     identities.set(id.sub, id);
-    saveIdentities();
+    if (!(await persistOr503(res, saveIdentities()))) return;
     json(res, 200, { received: true, granted: true });
     return;
   }
@@ -941,7 +1020,7 @@ const server = http.createServer(async (req, res) => {
     }
     const avatar = String(data.avatar || "").trim().slice(0, 40) || DEFAULT_TOKEN;
     activeNames.set(name, { avatar, lastSeen: Date.now(), gid: sess.sub, email: sess.email, realName: sess.name });
-    // จำชื่อเล่น/อวตารไว้กับบัญชี (sub) — login ครั้งถัดไปไม่ต้องตั้งใหม่ (เก็บหลังบ้าน identities.json)
+    // จำชื่อเล่น/อวตารไว้กับบัญชี (sub) — login ครั้งถัดไปไม่ต้องตั้งใหม่
     const idn = identities.get(sess.sub);
     if (idn) {
       const prev = idn.nickname || "";
@@ -956,7 +1035,7 @@ const server = http.createServer(async (req, res) => {
         h.unshift({ from: prev || null, name, at: Date.now() });
         idn.nickHistory = h.slice(0, 10);
       }
-      saveIdentities();
+      if (!(await persistOr503(res, saveIdentities()))) return;
     }
     json(res, 200, { ok: true });
     return;
@@ -1098,7 +1177,7 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, { nickname: id.nickname || "", avatar: id.avatar || DEFAULT_TOKEN, owned: id.owned, hearts: id.hearts || 0, supporter: !!id.supporter });
     return;
   }
-  // ซื้อชิ้นส่วนอวตารด้วยหัวใจ — เพิ่มเข้าคลัง (owned) เก็บถาวรใน identities.json
+  // ซื้อชิ้นส่วนอวตารด้วยหัวใจ — เพิ่มเข้าคลัง (owned) เก็บถาวรในฐานข้อมูล
   if (method === "POST" && url.pathname === "/shop/buy") {
     let body;
     try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
@@ -1123,7 +1202,7 @@ const server = http.createServer(async (req, res) => {
     if (h < item.price) { json(res, 400, { error: `หัวใจไม่พอ (ต้องการ ${item.price}, มี ${h})` }); return; }
     idn.hearts = h - item.price;
     idn.owned.push(item.id);
-    saveIdentities();
+    if (!(await persistOr503(res, saveIdentities()))) return;
     json(res, 200, { ok: true, hearts: idn.hearts, owned: idn.owned });
     return;
   }
@@ -1185,7 +1264,7 @@ const server = http.createServer(async (req, res) => {
     recent.unshift({ from: giver.nickname || name, at: Date.now() });
     recv.heartsRecent = recent.slice(0, 5);
     giver.heartsGiven = { date: today, name: recv.nickname || name };
-    saveIdentities();
+    if (!(await persistOr503(res, saveIdentities()))) return;
     json(res, 200, { ok: true, hearts: recv.hearts, givenToday: true });
     return;
   }
@@ -1222,7 +1301,12 @@ const server = http.createServer(async (req, res) => {
     touch(name);
     // ชื่อมาจาก identity ของ session เท่านั้น — request ปลอมชื่อคนอื่นไม่ได้
     pushMessage({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), name, text, time: Date.now() });
-    const pt = addPoints(sessSend.sub, 2, "msg"); // ส่งข้อความ = +2 แต้ม (ถ้าไม่สแปม/ไม่เต็มโควต้า)
+    let pt;
+    try { pt = await addPoints(sessSend.sub, 2, "msg"); } catch (error) {
+      console.error("บันทึกคะแนนไม่สำเร็จ:", error.message);
+      json(res, 503, { error: "บันทึกคะแนนไม่สำเร็จ กรุณาลองใหม่" });
+      return;
+    }
     json(res, 200, { ok: true, rewarded: pt.awarded, dayLeft: pt.dayLeft });
     return;
   }
@@ -1284,7 +1368,12 @@ const server = http.createServer(async (req, res) => {
     if (isVoice) msg.voice = `/uploads/${filename}`; // ข้อความเสียง (ลบหลัง 5 นาทีเหมือนรูป)
     else msg.img = `/uploads/${filename}`;
     pushMessage(msg);
-    const pt = addPoints(sessUp.sub, 3, isVoice ? "voice" : "img"); // ส่งรูป/GIF/เสียง = +3 แต้ม (ถ้าไม่สแปม/ไม่เต็มโควต้า)
+    let pt;
+    try { pt = await addPoints(sessUp.sub, 3, isVoice ? "voice" : "img"); } catch (error) {
+      console.error("บันทึกคะแนนไม่สำเร็จ:", error.message);
+      json(res, 503, { error: "บันทึกคะแนนไม่สำเร็จ กรุณาลองใหม่" });
+      return;
+    }
     json(res, 200, { ok: true, rewarded: pt.awarded, dayLeft: pt.dayLeft });
     return;
   }
@@ -1327,13 +1416,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/admin/ban") {
       const id = identities.get(sub) || {};
       banned.set(sub, { sub, email: id.email || "", name: id.name || "", nickname: id.nickname || "", reason: String(data.reason || "").slice(0, 200), bannedAt: Date.now() });
-      saveBanned();
+      if (!(await persistOr503(res, saveBanned()))) return;
       // เตะ session เดิมทิ้งทันที + ปลดชื่อในร้าน
       for (const [tok, s] of sessions) if (s.sub === sub) sessions.delete(tok);
       for (const [n, v] of activeNames) if (v.gid === sub) activeNames.delete(n);
     } else {
       banned.delete(sub);
-      saveBanned();
+      if (!(await persistOr503(res, saveBanned()))) return;
     }
     json(res, 200, { ok: true, banned: [...banned.values()] });
     return;
@@ -1387,14 +1476,20 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => {
-    console.log(`แชทกลุ่มพร้อมแล้ว: http://localhost:${PORT} (รูปจะถูกลบหลัง ${IMAGE_TTL_MS / 1000} วิ)`);
-    if (!GOOGLE_CLIENT_ID) console.log("⚠️ ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID — ผู้ใช้จะ login ด้วย Google ไม่ได้ (ดู วิธีใช้.md)");
-    if (!ADMIN_TOKEN) console.log("ℹ️ ยังไม่ได้ตั้งค่า ADMIN_TOKEN — หน้า /admin ปิดอยู่");
+  ready.then(() => {
+    server.listen(PORT, () => {
+      console.log(`แชทกลุ่มพร้อมแล้ว: http://localhost:${PORT} (รูปจะถูกลบหลัง ${IMAGE_TTL_MS / 1000} วิ)`);
+      console.log(useSupabase ? "✅ เก็บบัญชีและชื่อรุ้งใน Supabase" : "ℹ️ local mode: เก็บบัญชีในไฟล์ JSON");
+      if (!GOOGLE_CLIENT_ID) console.log("⚠️ ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID — ผู้ใช้จะ login ด้วย Google ไม่ได้ (ดู วิธีใช้.md)");
+      if (!ADMIN_TOKEN) console.log("ℹ️ ยังไม่ได้ตั้งค่า ADMIN_TOKEN — หน้า /admin ปิดอยู่");
+    });
+  }).catch((error) => {
+    console.error("เปิดเซิร์ฟเวอร์ไม่ได้:", error.message);
+    process.exitCode = 1;
   });
 }
 
-module.exports = { server, verifyGoogleJwt, sessions, identities, activeNames, retiredNames, levelFor };
+module.exports = { server, ready, verifyGoogleJwt, sessions, identities, activeNames, retiredNames, levelFor };
 
 // ponytail: เก็บข้อความใน memory เท่านั้น — server รีสตาร์ทแล้วข้อความและรูปหาย
 // อัปเกรดทีหลัง: เปลี่ยน messages เป็น SQLite (better-sqlite3) หรือเขียน append-only JSON file

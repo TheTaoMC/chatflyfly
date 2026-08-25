@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const CLIENT_ID = "test-client.apps.googleusercontent.com";
 const ADMIN_TOKEN = "secret-admin-token";
 const STRIPE_WEBHOOK_SECRET = "whsec_test_chatflyfly";
+const SUPABASE_SECRET_KEY = "sb_secret_test_chatflyfly";
 
 // สร้าง RSA key + JWKS server ปลอม ก่อน require server.js (server.js อ่าน env ตอนโหลด)
 const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -56,6 +57,31 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   await new Promise((r) => jwksSrv.listen(0, "127.0.0.1", r));
   const jwksUrl = `http://127.0.0.1:${jwksSrv.address().port}/certs`;
 
+  const supabaseState = new Map([["identities", []], ["banned", []]]);
+  const supabaseSrv = http.createServer(async (req, res) => {
+    if (req.headers.apikey !== SUPABASE_SECRET_KEY) { res.writeHead(401); res.end(); return; }
+    const url = new URL(req.url, "http://localhost");
+    if (url.pathname !== "/rest/v1/app_state") { res.writeHead(404); res.end(); return; }
+    if (req.method === "GET") {
+      const id = String(url.searchParams.get("id") || "").replace(/^eq\./, "");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(supabaseState.has(id) ? [{ data: supabaseState.get(id) }] : []));
+      return;
+    }
+    if (req.method === "POST") {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const row = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      supabaseState.set(row.id, row.data);
+      res.writeHead(201);
+      res.end();
+      return;
+    }
+    res.writeHead(405);
+    res.end();
+  });
+  await new Promise((r) => supabaseSrv.listen(0, "127.0.0.1", r));
+
   process.env.GOOGLE_CLIENT_ID = CLIENT_ID;
   process.env.ADMIN_TOKEN = ADMIN_TOKEN;
   process.env.GOOGLE_JWKS_URL = jwksUrl;
@@ -69,8 +95,11 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   process.env.STRIPE_WEBHOOK_SECRET = STRIPE_WEBHOOK_SECRET;
   process.env.SUPPORT_PAYMENT_LINK = "https://buy.stripe.com/test_support";
   process.env.SUPPORT_MIN_AMOUNT = "2000";
+  process.env.SUPABASE_URL = `http://127.0.0.1:${supabaseSrv.address().port}`;
+  process.env.SUPABASE_SECRET_KEY = SUPABASE_SECRET_KEY;
 
   api = require("./server.js");
+  await api.ready;
   await new Promise((r) => api.server.listen(0, r));
   base = `http://127.0.0.1:${api.server.address().port}`;
 
@@ -114,11 +143,13 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     return fetch(base + p, { method: "POST", headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, ...headers }, body });
   };
   const get = (p, headers = {}) => fetch(base + p, { headers });
+  const savedIdentities = () => supabaseState.get("identities");
 
   t.after(async () => {
     // closeAllConnections: ปิด keep-alive จาก fetch ไม่งั้น server.close() ค้างรอไม่จบ
     await new Promise((r) => { api.server.closeAllConnections(); api.server.close(r); });
     await new Promise((r) => { jwksSrv.closeAllConnections(); jwksSrv.close(r); });
+    await new Promise((r) => { supabaseSrv.closeAllConnections(); supabaseSrv.close(r); });
     try { fs.rmSync(identitiesFile, { force: true }); } catch {}
     try { fs.rmSync(banFile, { force: true }); } catch {}
     try { fs.rmSync(partsFile, { force: true }); } catch {}
@@ -162,7 +193,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.ok(d.token);
     sessionA = d.token;
     // identities.json ถูกเขียน (หลังบ้าน)
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     assert.equal(saved[0].email, "user@example.com");
     assert.equal(saved[0].name, "สมชาย ใจดี");
   });
@@ -212,7 +243,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     const event = JSON.stringify({
       id: "evt_support_1",
       type: "checkout.session.completed",
-      data: { object: { id: "cs_support_1", payment_status: "paid", currency: "thb", amount_total: 2000, client_reference_id: ref } },
+      data: { object: { id: "cs_support_1", payment_status: "paid", currency: "thb", amount_total: 2000, client_reference_id: ref, customer_details: { email: "user@example.com" } } },
     });
     const bad = await fetch(base + "/stripe-webhook", { method: "POST", headers: { "Content-Type": "application/json", "Stripe-Signature": "t=1,v1=bad" }, body: event });
     assert.equal(bad.status, 400);
@@ -232,6 +263,17 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal((await paid.json()).granted, true);
     assert.equal(api.identities.get("gid-123").supporter, true);
     assert.equal(api.identities.get("gid-123").supportAmount, 2000);
+
+    const recoveryEvent = JSON.stringify({
+      id: "evt_support_recovery",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_support_recovery", payment_status: "paid", currency: "thb", amount_total: 2000, client_reference_id: "old-reference", customer_details: { email: "OTHER@example.com" } } },
+    });
+    const recoverySignature = crypto.createHmac("sha256", STRIPE_WEBHOOK_SECRET).update(`${timestamp}.${recoveryEvent}`).digest("hex");
+    const recovered = await fetch(base + "/stripe-webhook", { method: "POST", headers: { "Content-Type": "application/json", "Stripe-Signature": `t=${timestamp},v1=${recoverySignature}` }, body: recoveryEvent });
+    assert.equal(recovered.status, 200);
+    assert.equal((await recovered.json()).granted, true);
+    assert.equal(savedIdentities().find((i) => i.sub === "gid-999").supporter, true, "สิทธิ์กู้จากอีเมลต้องถูกบันทึกลง Supabase");
   });
 
   await t.test("nickname: จำชื่อเล่นไว้กับบัญชี — login รอบ 2 ได้ชื่อเดิมคืน ไม่ต้องตั้งใหม่", async () => {
@@ -241,7 +283,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     const d = await res.json();
     assert.equal(d.nickname, "ราเมง1234");
     // identities.json เก็บ nickname ไว้กับ sub ด้วย
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     const me = saved.find((i) => i.sub === "gid-123");
     assert.equal(me.nickname, "ราเมง1234");
   });
@@ -276,7 +318,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(me.toNext, 298); // ต้องอีก 298 แต้ม (300-2)
     assert.equal(me.pct, 1); // แถบความคืบหน้า ~1%
     // คะแนนเก็บถาวรใน identities.json
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     assert.equal(saved.find((i) => i.sub === "gid-123").points, 2);
   });
 
@@ -399,7 +441,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     // banned.json ถูกเขียน + ขึ้นใน /admin/users
     const au = await (await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` })).json();
     assert.ok(au.banned.some((b) => b.sub === "gid-123"));
-    assert.ok(fs.existsSync(banFile));
+    assert.ok(supabaseState.get("banned").some((b) => b.sub === "gid-123"));
 
     // ปลดแบน → login ได้อีก
     assert.equal((await post("/admin/unban", { sub: "gid-123" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 200);
@@ -420,7 +462,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     }
 
     // identities.json เก็บ nickHistory 10 อันล่าสุด (ใหม่สุดก่อน)
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     const me = saved.find((i) => i.sub === "gid-123");
     assert.equal(me.nickname, "ประวัติ12");
     assert.equal(me.nickHistory.length, 10);
@@ -493,7 +535,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.match((await again.json()).error, /วันนี้ให้หัวใจ/);
 
     // identities.json: ผู้รับมี hearts + heartsRecent, ผู้ให้มี heartsGiven วันนี้
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     const recv = saved.find((i) => i.nickname === "ผู้รับหัวใจ");
     assert.equal(recv.hearts, 1);
     assert.equal(recv.heartsRecent[0].from, "ผู้ให้หัวใจ");
@@ -547,13 +589,13 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal((await post("/shop/buy", { id: "zz9", session: r2 })).status, 404);
     assert.equal((await post("/shop/buy", { id: "b4" })).status, 401);
     // identities.json เก็บ owned + หัวใจโดนตัด
-    const saved = JSON.parse(fs.readFileSync(identitiesFile, "utf8"));
+    const saved = savedIdentities();
     const buyer = saved.find((i) => i.sub === "gid-999");
     assert.ok(buyer.owned.includes("b4"));
     assert.equal(buyer.hearts, 0);
     // /claim เก็บ avatar token
     assert.equal((await post("/claim", { name: "ผู้รับหัวใจ", avatar: "b2c1h1f1o0", session: r2 })).status, 200);
-    const after = JSON.parse(fs.readFileSync(identitiesFile, "utf8")).find((i) => i.sub === "gid-999");
+    const after = savedIdentities().find((i) => i.sub === "gid-999");
     assert.equal(after.avatar, "b2c1h1f1o0");
   });
 
