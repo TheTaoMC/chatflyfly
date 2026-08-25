@@ -1081,10 +1081,16 @@ const server = http.createServer(async (req, res) => {
 
   // รายชื่อคนที่อยู่ในห้องตอนนี้ (ฝั่งซ้าย "ร้านตัวละคร") — เอาคะแนน/เลเวลจาก identities มาโชว์ด้วย
   if (method === "GET" && url.pathname === "/users") {
+    // ส่งเฉพาะจำนวนที่หน้าจอวางได้จริง เพื่อให้ห้องที่มีคนออนไลน์มากไม่ต้อง render ทุกคน
+    const requestedLimit = Number.parseInt(url.searchParams.get("limit") || "50", 10);
+    const limit = Math.max(0, Math.min(Number.isFinite(requestedLimit) ? requestedLimit : 50, 100));
+    const online = [...activeNames.entries()].map(([name, v]) => {
+      const id = v.gid ? identities.get(v.gid) : null;
+      return { name, v, id, points: id ? id.points || 0 : 0 };
+    }).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, "th"));
     json(res, 200, {
-      users: [...activeNames.entries()].map(([name, v]) => {
-        const id = v.gid ? identities.get(v.gid) : null;
-        const points = id ? id.points || 0 : 0;
+      total: online.length,
+      users: online.slice(0, limit).map(({ name, v, id, points }) => {
         const lv = levelFor(points);
         const idx = LEVELS.indexOf(lv);
         const next = LEVELS[idx + 1] || null; // null = ถึงขั้นสูงสุดแล้ว
