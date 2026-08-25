@@ -79,13 +79,13 @@ const SUPPORT_MIN_AMOUNT = Number.isSafeInteger(supportMinAmount) && supportMinA
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 const AVATARS_DIR = process.env.AVATARS_DIR || path.join(__dirname, "avatars");
-// ชิ้นส่วนอวตารที่วาดเอง (สตูดิโอ) — เก็บใน parts.json (committable → อยู่ข้าม deploy)
+const SUPABASE_AVATARS_BUCKET = process.env.SUPABASE_AVATARS_BUCKET || "avatars";
+// ชิ้นส่วนอวตารที่วาดเอง — local เก็บใน parts.json, production เก็บ metadata ใน Supabase
 const PARTS_FILE = process.env.PARTS_FILE || path.join(__dirname, "parts.json");
 let customParts = []; // [{id, type, name, colorA, colorB, map[], price}]
 try {
   customParts = JSON.parse(fs.readFileSync(PARTS_FILE, "utf8"));
 } catch { /* ยังไม่มีไฟล์ = ว่าง */ }
-const saveParts = () => fs.writeFileSync(PARTS_FILE, JSON.stringify(customParts, null, 2));
 const IMG_EXT = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
 const AUDIO_EXT = { webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg" }; // ข้อความเสียง (kind=voice)
 const ALLOWED_EXT = { ...IMG_EXT, ...AUDIO_EXT }; // ใช้ตอนเสิร์ฟ /uploads/<file>
@@ -544,6 +544,16 @@ async function readSupabaseState(id) {
   return rows[0].data;
 }
 
+async function readSupabaseStateOrEmpty(id) {
+  const response = await fetch(supabaseEndpoint(id), { headers: { apikey: SUPABASE_SECRET_KEY }, signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error(`Supabase read ${id} failed (${response.status})`);
+  const rows = await response.json();
+  if (!Array.isArray(rows)) throw new Error(`Supabase row ${id} is invalid`);
+  if (!rows.length) return [];
+  if (!Array.isArray(rows[0].data)) throw new Error(`Supabase row ${id} is invalid`);
+  return rows[0].data;
+}
+
 async function writeSupabaseState(id, data) {
   const response = await fetch(supabaseEndpoint(id, true), {
     method: "POST",
@@ -563,11 +573,12 @@ function queueSupabaseWrite(id, data) {
 
 async function initializeState() {
   if (!!SUPABASE_URL !== !!SUPABASE_SECRET_KEY) throw new Error("ต้องตั้ง SUPABASE_URL และ SUPABASE_SECRET_KEY ให้ครบคู่");
-  const [identityRows, bannedRows] = useSupabase
-    ? await Promise.all([readSupabaseState("identities"), readSupabaseState("banned")])
-    : [readLocalState(IDENTITIES_FILE), readLocalState(BANNED_FILE)];
+  const [identityRows, bannedRows, partRows] = useSupabase
+    ? await Promise.all([readSupabaseState("identities"), readSupabaseState("banned"), readSupabaseStateOrEmpty("parts")])
+    : [readLocalState(IDENTITIES_FILE), readLocalState(BANNED_FILE), customParts];
   identityRows.forEach((item) => item?.sub && identities.set(item.sub, item));
   bannedRows.forEach((item) => item?.sub && banned.set(item.sub, item));
+  customParts = partRows;
 }
 
 async function saveIdentities() {
@@ -580,6 +591,47 @@ async function saveBanned() {
   const data = [...banned.values()];
   if (useSupabase) return queueSupabaseWrite("banned", data);
   writeLocalState(BANNED_FILE, data);
+}
+
+async function saveParts() {
+  if (useSupabase) return queueSupabaseWrite("parts", customParts);
+  fs.writeFileSync(PARTS_FILE, JSON.stringify(customParts, null, 2));
+}
+
+let avatarBucketReady = null;
+function storageUrl(pathname) {
+  return new URL(`/storage/v1/${pathname}`, SUPABASE_URL).toString();
+}
+function storageHeaders(extra = {}) {
+  return { apikey: SUPABASE_SECRET_KEY, Authorization: `Bearer ${SUPABASE_SECRET_KEY}`, ...extra };
+}
+async function ensureAvatarBucket() {
+  if (!useSupabase) return;
+  if (!avatarBucketReady) avatarBucketReady = (async () => {
+    const check = await fetch(storageUrl(`bucket/${SUPABASE_AVATARS_BUCKET}`), { method: "HEAD", headers: storageHeaders(), signal: AbortSignal.timeout(10_000) });
+    if (check.ok) return;
+    if (check.status !== 404) throw new Error(`ตรวจ bucket อวตารไม่สำเร็จ (${check.status})`);
+    const created = await fetch(storageUrl("bucket"), {
+      method: "POST", headers: storageHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ id: SUPABASE_AVATARS_BUCKET, name: SUPABASE_AVATARS_BUCKET, public: true, allowed_mime_types: ["image/png"], file_size_limit: 2 * 1024 * 1024 }), signal: AbortSignal.timeout(10_000),
+    });
+    if (!created.ok && created.status !== 409) throw new Error(`สร้าง bucket อวตารไม่สำเร็จ (${created.status})`);
+  })().catch((error) => { avatarBucketReady = null; throw error; });
+  return avatarBucketReady;
+}
+async function storeAvatarPng(layer, id, data) {
+  if (!useSupabase) {
+    const dir = path.join(AVATARS_DIR, layer); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, id + ".png"), data);
+    return `/avatars/${layer}/${id}.png`;
+  }
+  await ensureAvatarBucket();
+  const key = `${layer}/${id}.png`;
+  const uploaded = await fetch(storageUrl(`object/${SUPABASE_AVATARS_BUCKET}/${key}`), {
+    method: "PUT", headers: storageHeaders({ "Content-Type": "image/png", "x-upsert": "true" }), body: data, signal: AbortSignal.timeout(20_000),
+  });
+  if (!uploaded.ok) throw new Error(`อัปโหลดรูปอวตารไม่สำเร็จ (${uploaded.status})`);
+  return storageUrl(`object/public/${SUPABASE_AVATARS_BUCKET}/${key}`);
 }
 
 const ready = initializeState();
@@ -1140,14 +1192,12 @@ const server = http.createServer(async (req, res) => {
     let n = type === "o" ? 5 : 1;
     while (used.has(type + n)) n++;
     const id = type + n;
-    // บันทึกรูป PNG ลง avatars/<layer>/<id>.png
     const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[type];
-    const dir = path.join(AVATARS_DIR, layerDir);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, id + ".png"), parts.img.data);
-    const part = { id, type, name, price, png: "/avatars/" + layerDir + "/" + id + ".png" };
+    let png;
+    try { png = await storeAvatarPng(layerDir, id, parts.img.data); } catch (error) { json(res, 503, { error: error.message }); return; }
+    const part = { id, type, name, price, png };
     customParts.push(part);
-    saveParts();
+    if (!(await persistOr503(res, saveParts()))) { customParts.pop(); return; }
     json(res, 200, { ok: true, id: part.id });
     return;
   }
@@ -1170,9 +1220,9 @@ const server = http.createServer(async (req, res) => {
     if (form.img?.data?.length) {
       if (!hasExpectedFileSignature(form.img.data, "png")) { json(res, 400, { error: "ต้องอัปโหลดรูป PNG ที่ถูกต้อง" }); return; }
       const layerDir = { b: "bowl", c: "body", h: "head", f: "face", o: "hat" }[part.type];
-      fs.writeFileSync(path.join(AVATARS_DIR, layerDir, part.id + ".png"), form.img.data);
+      try { part.png = await storeAvatarPng(layerDir, part.id, form.img.data); } catch (error) { json(res, 503, { error: error.message }); return; }
     }
-    saveParts();
+    if (!(await persistOr503(res, saveParts()))) return;
     json(res, 200, { ok: true, id: part.id });
     return;
   }
@@ -1192,7 +1242,7 @@ const server = http.createServer(async (req, res) => {
     const before = customParts.length;
     customParts = customParts.filter((p) => p.id !== id);
     if (customParts.length === before) { json(res, 404, { error: "ไม่พบชิ้นส่วนนี้" }); return; }
-    saveParts();
+    if (!(await persistOr503(res, saveParts()))) return;
     json(res, 200, { ok: true });
     return;
   }

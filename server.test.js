@@ -59,9 +59,27 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   const jwksUrl = `http://127.0.0.1:${jwksSrv.address().port}/certs`;
 
   const supabaseState = new Map([["identities", []], ["banned", []]]);
+  const storageBuckets = new Set();
+  const storageObjects = new Map();
   const supabaseSrv = http.createServer(async (req, res) => {
     if (req.headers.apikey !== SUPABASE_SECRET_KEY) { res.writeHead(401); res.end(); return; }
     const url = new URL(req.url, "http://localhost");
+    if (url.pathname.startsWith("/storage/v1/")) {
+      const storagePath = url.pathname.slice("/storage/v1/".length);
+      if (req.method === "HEAD" && storagePath.startsWith("bucket/")) {
+        res.writeHead(storageBuckets.has(storagePath.slice(7)) ? 200 : 404); res.end(); return;
+      }
+      if (req.method === "POST" && storagePath === "bucket") {
+        const chunks = []; for await (const chunk of req) chunks.push(chunk);
+        const bucket = JSON.parse(Buffer.concat(chunks).toString("utf8")).id;
+        storageBuckets.add(bucket); res.writeHead(201); res.end(); return;
+      }
+      if (req.method === "PUT" && storagePath.startsWith("object/")) {
+        const chunks = []; for await (const chunk of req) chunks.push(chunk);
+        storageObjects.set(storagePath.slice(7), Buffer.concat(chunks)); res.writeHead(200); res.end(); return;
+      }
+      res.writeHead(404); res.end(); return;
+    }
     if (url.pathname !== "/rest/v1/app_state") { res.writeHead(404); res.end(); return; }
     if (req.method === "GET") {
       const id = String(url.searchParams.get("id") || "").replace(/^eq\./, "");
@@ -632,10 +650,9 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     // ขึ้นร้านค้า (ตั้งราคาไว้ 10)
     const shop = await (await get("/shop")).json();
     assert.ok(shop.items.some((i) => i.id === "b6" && i.price === 10));
-    // parts.json เขียนจริง
-    assert.ok(JSON.parse(fs.readFileSync(partsFile, "utf8")).some((p) => p.id === "b6"));
-    // PNG ไฟล์อยู่จริง
-    assert.ok(fs.existsSync(path.join(avatarsDir, "bowl", "b6.png")));
+    // metadata และ PNG เก็บถาวรใน Supabase Storage/state
+    assert.ok(supabaseState.get("parts").some((p) => p.id === "b6"));
+    assert.ok(storageObjects.has("avatars/bowl/b6.png"));
     // ผู้ใช้ซื้อ custom part ได้
     const r2 = (await (await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-999", email: "other@example.com", name: "อีกคน" })) })).json()).token;
     api.identities.get("gid-999").hearts = 20;

@@ -36,7 +36,7 @@
   .char.me img { outline: 3px solid #ffcc00; box-shadow: 0 0 0 3px #000; }
   .char-name { color: #e8c9a0; font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .char.me .char-name { color: #ffcc00; font-weight: 700; }
-  .char.top3 .char-name { color: #ffcc00 !important; font-weight: 700; background: none !important; -webkit-text-fill-color: #ffcc00; }
+  .char.top-gold .char-name { color: #ffcc00 !important; font-weight: 700; background: none !important; -webkit-text-fill-color: #ffcc00; }
   .char-level { color: #ffb35c; font-size: 10px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .char.me .char-level { color: #ffcc00; }
   .char-next { color: #8a84a8; font-size: 10px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -773,17 +773,18 @@
       onlineCount.textContent = `🟢 ออนไลน์ ${Number(total || 0).toLocaleString("th-TH")} คน`;
       shopGrid.innerHTML = users.map((u, index) => {
         const mine = u.name === myName ? " me" : "";
-        const rank = index < 3 ? " top3" : "";
+        const rank = index < 3 && !u.supporter ? " top-gold" : "";
+        const nameStyle = u.supporter ? " rainbow-name" : "";
         const lvl = u.title ? `${u.icon} ${esc(u.title)}` : "";
         // แถบความคืบหน้า
         const bar = u.pct !== undefined ? `<div class="char-prog"><i style="width:${u.pct}%"></i></div>` : "";
         // โควต้าวันนี้เต็ม → บอกแทนการนับแต้ม (กันสับสนว่าทำไมไม่ขึ้น)
         const capped = u.dayCap && u.dayPoints >= u.dayCap;
         const nxt = capped ? `<div class="char-next">วันนี้ได้ครบแต้มแล้ว 🛑</div>`
-          : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "";
+          : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว</div>` : "";
         // ของตัวเองใช้ชุดที่เพิ่งบันทึกทันที ไม่ต้องรอรอบ poll ถัดไปจากเซิร์ฟเวอร์
         const avatar = u.name === myName && myAvatar ? myAvatar : u.avatar;
-        return `<div class="char${mine}${rank}">${pixelSprite(avatar)}<div class="char-name${supporterClass(u.supporter)}">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+        return `<div class="char${mine}${rank}">${pixelSprite(avatar)}<div class="char-name${nameStyle}">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
       }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
       // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
       const me = users.find((u) => u.name === myName);
