@@ -29,3 +29,5 @@ knowledge.md
 
 # config ส่วนตัว (GOOGLE_CLIENT_ID, ADMIN_TOKEN) — ห้ามขึ้น GitHub
 .env.local
+
+# avatars
