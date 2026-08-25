@@ -12,6 +12,7 @@ const fs = require("node:fs");
 
 const CLIENT_ID = "test-client.apps.googleusercontent.com";
 const ADMIN_TOKEN = "secret-admin-token";
+const STRIPE_WEBHOOK_SECRET = "whsec_test_chatflyfly";
 
 // สร้าง RSA key + JWKS server ปลอม ก่อน require server.js (server.js อ่าน env ตอนโหลด)
 const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -65,6 +66,9 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   process.env.PORT = "0";
   process.env.PARTS_FILE = partsFile;
   process.env.AVATARS_DIR = avatarsDir;
+  process.env.STRIPE_WEBHOOK_SECRET = STRIPE_WEBHOOK_SECRET;
+  process.env.SUPPORT_PAYMENT_LINK = "https://buy.stripe.com/test_support";
+  process.env.SUPPORT_MIN_AMOUNT = "2000";
 
   api = require("./server.js");
   await new Promise((r) => api.server.listen(0, r));
@@ -193,6 +197,43 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(res.status, 200);
   });
 
+  // ── สนับสนุนผ่าน Stripe → ชื่อรุ้ง ──
+  await t.test("support: ผูก Payment Link กับบัญชี และให้สิทธิ์เฉพาะ webhook ที่เซ็นถูก+จ่ายครบ", async () => {
+    const linkRes = await post("/support-link", { session: sessionA });
+    assert.equal(linkRes.status, 200);
+    const paymentUrl = new URL((await linkRes.json()).url);
+    assert.equal(paymentUrl.searchParams.get("locked_prefilled_email"), "user@example.com");
+    assert.equal(paymentUrl.searchParams.get("locale"), "th");
+    const ref = paymentUrl.searchParams.get("client_reference_id");
+    assert.match(ref, /^[A-Za-z0-9_-]{20,100}$/);
+    assert.ok(!paymentUrl.toString().includes(sessionA), "ห้ามส่ง session token ไป Stripe");
+    assert.ok(!paymentUrl.toString().includes("gid-123"), "ห้ามส่ง Google sub ไป Stripe");
+
+    const event = JSON.stringify({
+      id: "evt_support_1",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_support_1", payment_status: "paid", currency: "thb", amount_total: 2000, client_reference_id: ref } },
+    });
+    const bad = await fetch(base + "/stripe-webhook", { method: "POST", headers: { "Content-Type": "application/json", "Stripe-Signature": "t=1,v1=bad" }, body: event });
+    assert.equal(bad.status, 400);
+    assert.equal(api.identities.get("gid-123").supporter, undefined);
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const underpaidEvent = event.replace('"amount_total":2000', '"amount_total":1999');
+    const underpaidSignature = crypto.createHmac("sha256", STRIPE_WEBHOOK_SECRET).update(`${timestamp}.${underpaidEvent}`).digest("hex");
+    const underpaid = await fetch(base + "/stripe-webhook", { method: "POST", headers: { "Content-Type": "application/json", "Stripe-Signature": `t=${timestamp},v1=${underpaidSignature}` }, body: underpaidEvent });
+    assert.equal(underpaid.status, 200);
+    assert.equal((await underpaid.json()).granted, false);
+    assert.equal(api.identities.get("gid-123").supporter, undefined);
+
+    const signature = crypto.createHmac("sha256", STRIPE_WEBHOOK_SECRET).update(`${timestamp}.${event}`).digest("hex");
+    const paid = await fetch(base + "/stripe-webhook", { method: "POST", headers: { "Content-Type": "application/json", "Stripe-Signature": `t=${timestamp},v1=${signature}` }, body: event });
+    assert.equal(paid.status, 200);
+    assert.equal((await paid.json()).granted, true);
+    assert.equal(api.identities.get("gid-123").supporter, true);
+    assert.equal(api.identities.get("gid-123").supportAmount, 2000);
+  });
+
   await t.test("nickname: จำชื่อเล่นไว้กับบัญชี — login รอบ 2 ได้ชื่อเดิมคืน ไม่ต้องตั้งใหม่", async () => {
     // login ใหม่ด้วยบัญชีเดิม (gid-123) → ต้องได้ nickname "ราเมง1234" กลับมา
     const res = await post("/google-login", { credential: makeJwt(validClaims()) });
@@ -214,6 +255,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(u.email, undefined);
     assert.equal(u.realName, undefined);
     assert.equal(u.gid, undefined);
+    assert.equal(u.supporter, true);
   });
 
   // ── /send ต้องมี session ──
@@ -224,6 +266,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(ok.status, 200);
     const sent = (await (await get("/messages")).json()).messages.at(-1);
     assert.equal(sent.name, "ราเมง1234");
+    assert.equal(sent.supporter, true);
     // ส่งข้อความ = +2 แต้ม → /users โชว์คะแนน + เลเวล (ยังเป็นมือใหม่) + ความคืบหน้า
     const { users } = await (await get("/users")).json();
     const me = users.find((u) => u.name === "ราเมง1234");
@@ -247,6 +290,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(d.points, 2);
     assert.equal(d.level, "นักชิมมือใหม่");
     assert.equal(d.stats.msgs, 1); // นับสถิติข้อความ
+    assert.equal(d.supporter, true);
     assert.equal(d.email, undefined); // ห้ามรั่ว
     assert.equal(d.realName, undefined); // ห้ามรั่ว
     assert.equal(d.sub, undefined); // ห้ามรั่ว

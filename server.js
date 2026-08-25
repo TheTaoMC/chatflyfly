@@ -24,7 +24,7 @@ try {
   }
 } catch { /* ไฟล์ไม่ valid ก็ข้ามไป */ }
 
-const PORT = Number(process.env.PORT) || 3000; // Render/Fly ส่ง PORT env มาให้ — ใช้ของเดิมถ้าไม่ตั้ง
+const PORT = Number(process.env.PORT) || 3000; // Render ส่ง PORT env มาให้ — ใช้ของเดิมถ้าไม่ตั้ง
 // วันไทย (Asia/Bangkok) — ใช้รีเซ็ตโควต้าต่อวัน (ให้หัวใจ/คะแนน)
 const dayKey = (ms = Date.now()) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); // YYYY-MM-DD
 const MAX_MESSAGES = 200; // เก็บแค่ 200 ข้อความล่าสุดใน memory
@@ -68,6 +68,11 @@ const GOOGLE_JWKS_URL = process.env.GOOGLE_JWKS_URL || "https://www.googleapis.c
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ""; // token หน้า/API ผู้ดูแล — ถ้าไม่ตั้ง = ปิดไม่ให้เข้าถึง
 const IDENTITIES_FILE = process.env.IDENTITIES_FILE || path.join(__dirname, "identities.json"); // หลังบ้าน (เก็บถาวร)
 const BANNED_FILE = process.env.BANNED_FILE || path.join(__dirname, "banned.json"); // blocklist (sub ของ Google)
+const SUPPORT_PAYMENT_LINK = process.env.SUPPORT_PAYMENT_LINK || "https://buy.stripe.com/8x2bJ3a3P7IOef2fsHbsc00";
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+const STRIPE_PAYMENT_LINK_ID = process.env.STRIPE_PAYMENT_LINK_ID || ""; // plink_... (ไม่บังคับ แต่ช่วยล็อกให้รับเฉพาะลิงก์นี้)
+const supportMinAmount = Number(process.env.SUPPORT_MIN_AMOUNT);
+const SUPPORT_MIN_AMOUNT = Number.isSafeInteger(supportMinAmount) && supportMinAmount > 0 ? supportMinAmount : 2000; // หน่วยสตางค์ = ฿20
 
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 const AVATARS_DIR = process.env.AVATARS_DIR || path.join(__dirname, "avatars");
@@ -427,7 +432,14 @@ const roomFor = (sub) => {
   cleanMatching();
   return [...randomRooms.values()].find((room) => room.users.some((u) => u.sub === sub));
 };
-const roomPublic = (room) => room && ({ id: room.id, users: room.users.map(({ name }) => ({ name })), prompt: room.prompt, expiresAt: room.expiresAt, messages: room.messages, game: room.game });
+const roomPublic = (room) => room && ({
+  id: room.id,
+  users: room.users.map(({ name }) => publicNamed({ name })),
+  prompt: room.prompt,
+  expiresAt: room.expiresAt,
+  messages: room.messages.map(publicNamed),
+  game: room.game && { ...room.game, answers: room.game.answers.map(publicNamed) },
+});
 
 // เก็บข้อความลง memory (ตัดส่วนเกิน + ลบไฟล์ของข้อความรูป/เสียงที่หลุดวง)
 const pushMessage = (msg) => {
@@ -445,7 +457,7 @@ const json = (res, status, obj) => {
   res.end(JSON.stringify(obj));
 };
 
-// Rate limit แบบ in-memory: พอสำหรับกันลองของ/ยิงบอทที่ชั้นแอป (ควรเสริม WAF ของ Fly/Cloudflare หากโตขึ้น)
+// Rate limit แบบ in-memory: พอสำหรับกันลองของ/ยิงบอทที่ชั้นแอป (ควรเสริม WAF ของ Render/Cloudflare หากโตขึ้น)
 const rateBuckets = new Map();
 function clientIp(req) {
   const forwarded = TRUST_PROXY ? String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() : "";
@@ -482,6 +494,26 @@ function saveIdentities() {
   try { fs.writeFileSync(IDENTITIES_FILE, JSON.stringify([...identities.values()], null, 2)); } catch { /* ไม่ fatal */ }
 }
 loadIdentities();
+
+// ponytail: จำนวนสมาชิกยังเล็ก จึง scan Map ตามชื่อเล่นแทนการมี index ชุดที่สองซึ่งเสี่ยงค้างตอนเปลี่ยนชื่อ
+// ข้อจำกัดคือ O(n) ต่อชื่อ; ถ้าสมาชิกโตมากค่อยเพิ่ม nickname -> sub index และอัปเดตใน /claim
+const identityForNickname = (name) => [...identities.values()].find((i) => i.nickname === name) || null;
+const publicNamed = ({ sub, gid, email, realName, ...item }) => ({ ...item, supporter: !!identityForNickname(item.name)?.supporter });
+const publicPost = (post) => ({ ...publicNamed(post), comments: (post.comments || []).map(publicNamed) });
+
+function validStripeSignature(rawBody, header, now = Date.now()) {
+  if (!STRIPE_WEBHOOK_SECRET) return false;
+  const fields = String(header || "").split(",").map((part) => part.trim().split("="));
+  const timestamp = fields.find(([key]) => key === "t")?.[1] || "";
+  const signatures = fields.filter(([key]) => key === "v1").map(([, value]) => value);
+  const seconds = Number(timestamp);
+  if (!Number.isSafeInteger(seconds) || Math.abs(now / 1000 - seconds) > 300 || !signatures.length) return false;
+  const expected = crypto.createHmac("sha256", STRIPE_WEBHOOK_SECRET).update(timestamp).update(".").update(rawBody).digest();
+  return signatures.some((signature) => {
+    if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+    return crypto.timingSafeEqual(expected, Buffer.from(signature, "hex"));
+  });
+}
 
 // ---- Blocklist (ban) — ใช้ sub ของ Google เป็นกุญแจ เก็บใน banned.json ----
 const banned = new Map(); // sub -> {sub, email, name, reason, bannedAt}
@@ -667,14 +699,14 @@ const server = http.createServer(async (req, res) => {
     const session = sessions.get(String(url.searchParams.get("session") || ""));
     const identity = session && identities.get(session.sub);
     if (identity?.nickname) touch(identity.nickname);
-    json(res, 200, { messages });
+    json(res, 200, { messages: messages.map(publicNamed) });
     return;
   }
 
   // ฟีดชั่วคราว: เก็บเฉพาะ 24 ชั่วโมงล่าสุดใน memory (restart ก็หายด้วย)
   if (method === "GET" && url.pathname === "/posts") {
     cleanPosts();
-    json(res, 200, { posts: [...posts].sort((a, b) => b.time - a.time) });
+    json(res, 200, { posts: [...posts].sort((a, b) => b.time - a.time).map(publicPost) });
     return;
   }
 
@@ -812,6 +844,64 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // สร้าง Payment Link เฉพาะบัญชี: ล็อกอีเมล Google + แนบรหัสสุ่มที่ไม่ใช่ session/sub
+  if (method === "POST" && url.pathname === "/support-link") {
+    let body;
+    try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
+    let data;
+    try { data = JSON.parse(body); } catch { json(res, 400, { error: "invalid json" }); return; }
+    const sess = sessions.get(String(data.session || ""));
+    if (!sess) { json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" }); return; }
+    if (banned.has(sess.sub)) { json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" }); return; }
+    const id = identities.get(sess.sub);
+    if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id.email || "") || id.email.length > 254) {
+      json(res, 400, { error: "บัญชีนี้ไม่มีอีเมล Google ที่ใช้งานได้" }); return;
+    }
+    if (!STRIPE_WEBHOOK_SECRET) { json(res, 503, { error: "ระบบสนับสนุนยังตั้งค่า webhook ไม่ครบ" }); return; }
+    let paymentUrl;
+    try {
+      paymentUrl = new URL(SUPPORT_PAYMENT_LINK);
+      if (paymentUrl.protocol !== "https:" || paymentUrl.hostname !== "buy.stripe.com") throw new Error("invalid link");
+    } catch { json(res, 503, { error: "ลิงก์สนับสนุนยังตั้งค่าไม่ถูกต้อง" }); return; }
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(id.supportRef || "")) id.supportRef = crypto.randomBytes(24).toString("base64url");
+    id.lastSeen = Date.now();
+    identities.set(sess.sub, id);
+    saveIdentities();
+    paymentUrl.searchParams.set("locked_prefilled_email", id.email);
+    paymentUrl.searchParams.set("client_reference_id", id.supportRef);
+    paymentUrl.searchParams.set("locale", "th");
+    json(res, 200, { url: paymentUrl.toString() });
+    return;
+  }
+
+  // Stripe ส่ง raw JSON มาที่นี่หลังชำระเงิน — ตรวจลายเซ็นก่อน parse/ให้สิทธิ์ทุกครั้ง
+  if (method === "POST" && url.pathname === "/stripe-webhook") {
+    let rawBody;
+    try { rawBody = await readBody(req, 256 * 1024); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
+    if (!validStripeSignature(rawBody, req.headers["stripe-signature"])) { json(res, 400, { error: "invalid signature" }); return; }
+    let event;
+    try { event = JSON.parse(rawBody.toString("utf8")); } catch { json(res, 400, { error: "invalid json" }); return; }
+    if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
+      json(res, 200, { received: true }); return;
+    }
+    const checkout = event?.data?.object || {};
+    const ref = String(checkout.client_reference_id || "");
+    const validPayment = checkout.payment_status === "paid"
+      && String(checkout.currency || "").toLowerCase() === "thb"
+      && Number.isSafeInteger(checkout.amount_total) && checkout.amount_total >= SUPPORT_MIN_AMOUNT
+      && (!STRIPE_PAYMENT_LINK_ID || checkout.payment_link === STRIPE_PAYMENT_LINK_ID);
+    const id = validPayment ? [...identities.values()].find((item) => item.supportRef === ref) : null;
+    if (!id) { json(res, 200, { received: true, granted: false }); return; }
+    id.supporter = true;
+    id.supporterSince ||= Date.now();
+    id.stripeSessionId = String(checkout.id || "").slice(0, 255);
+    id.supportAmount = Math.max(id.supportAmount || 0, checkout.amount_total);
+    identities.set(id.sub, id);
+    saveIdentities();
+    json(res, 200, { received: true, granted: true });
+    return;
+  }
+
   // จองชื่อก่อนเข้าแชท — ต้อง login Google แล้ว (session) ชื่อผูกกับบัญชี (gid): ซ้ำ/แย่งชื่อโดน 409
   if (method === "POST" && url.pathname === "/claim") {
     let body;
@@ -894,6 +984,7 @@ const server = http.createServer(async (req, res) => {
           dayPoints: id ? id.dayPoints || 0 : 0,
           dayCap: DAILY_POINT_CAP,
           hearts: id ? id.hearts || 0 : 0, // หัวใจที่สะสมไว้ (แลกของในอนาคต)
+          supporter: !!id?.supporter,
         };
       }),
     });
@@ -1004,7 +1095,7 @@ const server = http.createServer(async (req, res) => {
     const id = identities.get(s.sub);
     if (!id) { json(res, 404, { error: "ไม่พบผู้ใช้" }); return; }
     if (!id.owned) id.owned = [...FREE_PARTS];
-    json(res, 200, { nickname: id.nickname || "", avatar: id.avatar || DEFAULT_TOKEN, owned: id.owned, hearts: id.hearts || 0 });
+    json(res, 200, { nickname: id.nickname || "", avatar: id.avatar || DEFAULT_TOKEN, owned: id.owned, hearts: id.hearts || 0, supporter: !!id.supporter });
     return;
   }
   // ซื้อชิ้นส่วนอวตารด้วยหัวใจ — เพิ่มเข้าคลัง (owned) เก็บถาวรใน identities.json
@@ -1278,6 +1369,7 @@ const server = http.createServer(async (req, res) => {
       online,
       level: lv.title, icon: lv.icon, points,
       hearts: pub.hearts || 0,
+      supporter: !!pub.supporter,
       givenToday,
       nextTitle: next ? next.title : "", nextIcon: next ? next.icon : "",
       toNext: next ? Math.max(0, next.min - points) : 0,

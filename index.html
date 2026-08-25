@@ -52,11 +52,24 @@
   #headerBtns { display: flex; gap: 8px; }
   #todayBtn { background: #3a1224; border-color: #8b3158; color: #ffb3dc; padding: 5px 10px; }
   #matchBtn { background:#17322a; border-color:#0f5a45; color:#8fffd8; padding:5px 10px; }
+  #supportBtn { background:#4a193e; border-color:#ff6ec7; color:#fff0a8; padding:5px 10px; }
   #soundBtn { background: #241b3b; border: 2px solid #4a3d75; color: #00e5ff; padding: 5px 10px; font-size: 13px; box-shadow: 3px 3px 0 #000; }
   #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 70%; padding: 8px 12px; background: #241b36; border: 2px solid #0a0713; align-self: flex-start; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
   .msg.me { background: #17322a; border-color: #0f5a45; align-self: flex-end; }
   .msg .name { font-size: 12px; font-weight: 700; color: #00e5ff; }
+  .rainbow-name { color: #ffcc00 !important; font-weight: 700; }
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    .rainbow-name {
+      background: linear-gradient(90deg,#ff4d6d,#ffb703,#70e000,#00d4ff,#8b5cf6,#ff4dba,#ff4d6d) 0 50% / 180px auto;
+      color: transparent !important;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: rainbowShift 3s linear infinite;
+    }
+  }
+  @keyframes rainbowShift { to { background-position: 180px 50%; } }
+  @media (prefers-reduced-motion: reduce) { .rainbow-name { animation: none; } }
   .msg .time { font-size: 11px; color: #8a84a8; float: right; margin-left: 8px; margin-top: 4px; }
   form { display: flex; gap: 8px; padding: 12px; background: #171122; border-top: 3px solid #0a0713; }
   input[type="text"] { flex: 1; padding: 10px 12px; border: 2px solid #4a3d75; background: #0e0b16; color: #fff; font-size: 15px; font-family: inherit; }
@@ -181,6 +194,9 @@
     #voicePanel { bottom: 165px; left: 8px; right: 8px; max-width: none; }
     form { padding: 10px 8px; gap: 6px; }
     form button { padding: 10px 12px; }
+    #headerBtns { gap: 4px; }
+    #supportBtn .supportLabel { display: none; }
+    #nameBtn { max-width: 92px; padding-inline: 8px; }
   }
 </style>
 </head>
@@ -193,7 +209,7 @@
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
-<header>💬 กลุ่มแชท<span id="headerBtns"><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
+<header>💬 กลุ่มแชท<span id="headerBtns"><button id="supportBtn" type="button" title="สนับสนุนเว็บ ฿20">🌈 <span class="supportLabel">สนับสนุน</span></button><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
 <div id="messages"></div>
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
@@ -521,6 +537,21 @@
 
   const fmt = (t) => new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const supporterClass = (supporter) => supporter ? " rainbow-name" : "";
+
+  // ขอ URL จาก server เท่านั้น เพื่อให้ email/ref มาจากบัญชี Google ที่ login อยู่จริง
+  $("supportBtn").addEventListener("click", async () => {
+    if (!mySession) return toast("เข้าสู่ระบบด้วย Google ก่อนสนับสนุน");
+    const button = $("supportBtn");
+    button.disabled = true;
+    try {
+      const r = await fetch("/support-link", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ session:mySession }) });
+      const d = await r.json();
+      if (!r.ok) return toast(d.error || "เปิดหน้าสนับสนุนไม่สำเร็จ");
+      location.assign(d.url);
+    } catch { toast("เปิดหน้าสนับสนุนไม่สำเร็จ"); }
+    finally { button.disabled = false; }
+  });
 
   // ---- ฟีด "วันนี้" — ข้อมูลมาจาก memory ของ server และหมดอายุใน 24 ชั่วโมง ----
   const todayPanel = $("todayPanel"), postList = $("postList"), postText = $("postText");
@@ -531,8 +562,8 @@
   function renderPosts(posts) {
     if (!posts.length) { postList.innerHTML = '<div class="postEmpty">ยังไม่มีโพสต์วันนี้<br>เริ่มทักคนในร้านได้เลย ✦</div>'; return; }
     postList.innerHTML = posts.map((p) => {
-      const comments = (p.comments || []).map((c) => `<div class="comment"><b>${esc(c.name)}</b> ${esc(c.text)}<time>${fmt(c.time)}</time></div>`).join("");
-      return `<article class="post${p.name === myName ? " mine" : ""}"><span class="postName">${esc(p.name)}</span><span class="postTime">${fmt(p.time)}</span><div class="postBody">${esc(p.text)}</div><div class="comments">${comments}<form class="commentForm" data-post-id="${esc(p.id)}"><input maxlength="280" placeholder="เมนต์สั้น ๆ ..." aria-label="เขียนเมนต์"><button>เมนต์</button></form></div></article>`;
+      const comments = (p.comments || []).map((c) => `<div class="comment"><b class="${supporterClass(c.supporter).trim()}">${esc(c.name)}</b> ${esc(c.text)}<time>${fmt(c.time)}</time></div>`).join("");
+      return `<article class="post${p.name === myName ? " mine" : ""}"><span class="postName${supporterClass(p.supporter)}">${esc(p.name)}</span><span class="postTime">${fmt(p.time)}</span><div class="postBody">${esc(p.text)}</div><div class="comments">${comments}<form class="commentForm" data-post-id="${esc(p.id)}"><input maxlength="280" placeholder="เมนต์สั้น ๆ ..." aria-label="เขียนเมนต์"><button>เมนต์</button></form></div></article>`;
     }).join("");
     postList.querySelectorAll(".commentForm").forEach((f) => f.addEventListener("submit", sendComment));
   }
@@ -575,10 +606,10 @@
     roomArea.style.display = "block"; matchState.textContent = `โต๊ะ ${room.users.length} คน · เหลือประมาณ ${roomLeft(room.expiresAt)} นาที`;
     $("matchLeave").style.display = "block"; $("matchJoin").style.display = "none";
     $("roomPrompt").textContent = `โจทย์เปิดโต๊ะ: ${room.prompt}`;
-    $("roomMessages").innerHTML = room.messages.map((m) => `<div class="roomMsg"><b>${esc(m.name)}</b> ${esc(m.text)}</div>`).join("") || '<div class="matchHelp">เริ่มทักกันได้เลย ✦</div>';
+    $("roomMessages").innerHTML = room.messages.map((m) => `<div class="roomMsg"><b class="${supporterClass(m.supporter).trim()}">${esc(m.name)}</b> ${esc(m.text)}</div>`).join("") || '<div class="matchHelp">เริ่มทักกันได้เลย ✦</div>';
     const box = $("roomMessages"); box.scrollTop = box.scrollHeight;
     const game = room.game;
-    $("gameArea").innerHTML = !game ? '<b>🎮 เกมตอบพร้อมกัน</b><p class="matchHelp">ทุกคนตอบก่อน แล้วระบบจะเปิดคำตอบพร้อมกัน</p><button type="button" id="startGame">เริ่มเกม</button>' : `<b>🎮 ${esc(game.prompt)}</b><p class="matchHelp">${game.done ? "เฉลยแล้ว!" : `ตอบแล้ว ${game.answers.length}/${room.users.length} คน — คำตอบจะยังซ่อนอยู่`}</p>${game.done ? `<div class="gameAnswers">${game.answers.map((a) => `<div><b>${esc(a.name)}</b> ${esc(a.text)}</div>`).join("")}</div><button type="button" id="startGame">เล่นข้อใหม่</button>` : `<form id="gameForm"><input id="gameAnswer" maxlength="280" placeholder="พิมพ์คำตอบของคุณ..." autocomplete="off"><button>ล็อกคำตอบ</button></form>`}`;
+    $("gameArea").innerHTML = !game ? '<b>🎮 เกมตอบพร้อมกัน</b><p class="matchHelp">ทุกคนตอบก่อน แล้วระบบจะเปิดคำตอบพร้อมกัน</p><button type="button" id="startGame">เริ่มเกม</button>' : `<b>🎮 ${esc(game.prompt)}</b><p class="matchHelp">${game.done ? "เฉลยแล้ว!" : `ตอบแล้ว ${game.answers.length}/${room.users.length} คน — คำตอบจะยังซ่อนอยู่`}</p>${game.done ? `<div class="gameAnswers">${game.answers.map((a) => `<div><b class="${supporterClass(a.supporter).trim()}">${esc(a.name)}</b> ${esc(a.text)}</div>`).join("")}</div><button type="button" id="startGame">เล่นข้อใหม่</button>` : `<form id="gameForm"><input id="gameAnswer" maxlength="280" placeholder="พิมพ์คำตอบของคุณ..." autocomplete="off"><button>ล็อกคำตอบ</button></form>`}`;
     const start = $("startGame"); if (start) start.addEventListener("click", () => sendGame(""));
     const gf = $("gameForm"); if (gf) gf.addEventListener("submit", (e) => { e.preventDefault(); sendGame($("gameAnswer").value); });
   }
@@ -599,7 +630,7 @@
     const div = document.createElement("div");
     div.className = "msg" + (msg.name === myName ? " me" : "");
     // esc() ป้องกัน XSS — อย่าเปลี่ยนเป็น innerHTML กับค่าที่ไม่ได้ esc
-    let html = `<span class="name">${esc(msg.name)}</span>`;
+    let html = `<span class="name${supporterClass(msg.supporter)}">${esc(msg.name)}</span>`;
     if (msg.img) {
       // คลิกรูป = เปิดดูเต็มจอใน tab ใหม่
       html += `<a href="${esc(msg.img)}" target="_blank"><img src="${esc(msg.img)}" alt="รูป"></a>`;
@@ -624,7 +655,7 @@
 
   // ดึงข้อความใหม่ทุก 1.5 วิ (polling — ใช้ได้กับ tunnel ฟรีที่บัฟเฟอร์ SSE ค้าง)
   // ส่ง ?name=xxx ไปด้วย = heartbeat ยืนยันว่ายังอยู่ในห้อง (กันชื่อถูกปลดเมื่อเผลอไป tab อื่น)
-  let lastCount = -1;
+  let lastMessagesJson = "";
   let lastNewestId = null; // id ข้อความล่าสุดที่เคยเห็น — ใช้หาว่ามีข้อความใหม่หรือไม่ (ไม่ beep ตอนโหลดรอบแรก/ตอนรูปถูกลบ)
   async function poll() {
     try {
@@ -642,10 +673,11 @@
         if (fresh.some((m) => m.name !== myName) && !document.hidden) playSound();
         lastNewestId = newest;
       }
-      if (messages.length !== lastCount) {
+      const messagesJson = JSON.stringify(messages);
+      if (messagesJson !== lastMessagesJson) {
         list.innerHTML = "";
         messages.forEach(append);
-        lastCount = messages.length;
+        lastMessagesJson = messagesJson;
         list.scrollTop = list.scrollHeight;
       }
     } catch { /* ครั้งหน้าลองใหม่ */ }
@@ -712,7 +744,7 @@
           : u.toNext <= 0 && u.title ? `<div class="char-next">ระดับสูงสุดแล้ว 👑</div>` : "";
         // ของตัวเองใช้ชุดที่เพิ่งบันทึกทันที ไม่ต้องรอรอบ poll ถัดไปจากเซิร์ฟเวอร์
         const avatar = u.name === myName && myAvatar ? myAvatar : u.avatar;
-        return `<div class="char${mine}">${pixelSprite(avatar)}<div class="char-name">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
+        return `<div class="char${mine}">${pixelSprite(avatar)}<div class="char-name${supporterClass(u.supporter)}">${esc(u.name)}</div>${lvl ? `<div class="char-level">${lvl}</div>` : ""}${bar}${nxt}</div>`;
       }).join("") || '<div class="empty">ยังไม่มีลูกค้า 🍜</div>';
       // เลเวลอัพ — แจ้งเตือนเฉพาะคนที่เลเวลเปลี่ยนขึ้น
       const me = users.find((u) => u.name === myName);
@@ -734,6 +766,7 @@
   async function openProfile(name) {
     profErr.textContent = "";
     profileModal.style.display = "flex";
+    profName.classList.remove("rainbow-name");
     profName.textContent = name;
     profStatus.textContent = "กำลังโหลด...";
     profEdit.style.display = "none"; // ซ่อนไว้ก่อนเสมอ — จะโชว์เฉพาะโปรไฟล์ตัวเองเท่านั้น
@@ -744,6 +777,7 @@
       if (!r.ok) { profErr.textContent = d.error || "ไม่พบผู้ใช้"; profStatus.textContent = ""; return; }
       profAvatar.innerHTML = pixelSprite(d.avatar);
       profName.textContent = d.name;
+      profName.classList.toggle("rainbow-name", !!d.supporter);
       profStatus.textContent = d.online ? "🟢 ออนไลน์" : "⚪ ออฟไลน์";
       profStatus.style.color = d.online ? "#7ee08a" : "#8a84a8";
       profLevel.textContent = `${d.icon} ${d.level}`;
