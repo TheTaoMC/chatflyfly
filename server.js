@@ -518,7 +518,7 @@ function supabaseEndpoint(id, upsert = false) {
 }
 
 async function readSupabaseState(id) {
-  const response = await fetch(supabaseEndpoint(id), { headers: { apikey: SUPABASE_SECRET_KEY } });
+  const response = await fetch(supabaseEndpoint(id), { headers: { apikey: SUPABASE_SECRET_KEY }, signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`Supabase read ${id} failed (${response.status})`);
   const rows = await response.json();
   if (!Array.isArray(rows) || rows.length !== 1 || !Array.isArray(rows[0].data)) throw new Error(`Supabase row ${id} is missing or invalid`);
@@ -530,6 +530,7 @@ async function writeSupabaseState(id, data) {
     method: "POST",
     headers: { apikey: SUPABASE_SECRET_KEY, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({ id, data, updated_at: new Date().toISOString() }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Supabase write ${id} failed (${response.status})`);
 }
@@ -1485,7 +1486,7 @@ if (require.main === module) {
     });
   }).catch((error) => {
     console.error("เปิดเซิร์ฟเวอร์ไม่ได้:", error.message);
-    process.exitCode = 1;
+    process.exit(1);
   });
 }
 
