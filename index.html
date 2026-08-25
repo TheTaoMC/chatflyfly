@@ -198,6 +198,42 @@
     #supportBtn .supportLabel { display: none; }
     #nameBtn { max-width: 92px; padding-inline: 8px; }
   }
+
+  /* ---- จอเล็กมาก (ออกแบบและทดสอบที่ 375×667) ---- */
+  @media (max-width: 390px) {
+    header { min-height: 48px; padding: 7px 8px; gap: 6px; font-size: 0; }
+    #headerTitle { display: inline-flex; align-items: center; flex: 1 1 auto; min-width: 0; font-size: 0; }
+    #headerTitle::before { content: "💬"; font-size: 19px; }
+    #headerBtns { flex: 0 0 auto; gap: 3px; }
+    #headerBtns button { min-width: 35px; height: 34px; padding: 4px 6px; font-size: 0; box-shadow: 2px 2px 0 #000; }
+    #headerBtns button::after { font-size: 16px; }
+    #supportBtn::after { content: "🌈"; }
+    #matchBtn::after { content: "🎲"; }
+    #todayBtn::after { content: "✦"; color: #ffb3dc; }
+    #soundBtn::after { content: "🔊"; }
+    #soundBtn[aria-label="ปิดเสียง"]::after { content: "🔇"; }
+    #nameBtn { max-width: 35px; }
+    #nameBtn::after { content: "👤"; }
+
+    #messages { padding: 10px 8px; gap: 8px; }
+    .msg { max-width: 88%; padding: 7px 9px; box-shadow: 3px 3px 0 rgba(0,0,0,.45); overflow-wrap: anywhere; }
+    .msg audio { width: 100%; max-width: 200px; }
+    form { min-width: 0; padding: 8px 6px; gap: 5px; }
+    #text { min-width: 0; padding: 9px 8px; font-size: 14px; }
+    #imgBtn, #form button { width: 38px; min-width: 38px; height: 38px; padding: 6px; box-shadow: 2px 2px 0 #000; }
+    #gifBtn { font-size: 10px; letter-spacing: 0; }
+    #form button[type="submit"] { width: 43px; min-width: 43px; font-size: 0; }
+    #form button[type="submit"]::after { content: "➤"; font-size: 18px; }
+
+    #shop { max-height: 94px; }
+    #shopGrid { padding: 5px 7px; gap: 8px; }
+    .char img { width: 58px; height: 58px; }
+    .char-name, .char-level, .char-next { font-size: 9px; }
+    .char-prog { margin-top: 1px; }
+    #gifPanel, #voicePanel { bottom: 145px; }
+    #toast { top: 8px; right: 8px; left: 8px; padding: 8px 10px; font-size: 12px; }
+    .modal { padding: 16px; width: min(340px, calc(100vw - 20px)); }
+  }
 </style>
 </head>
 <body>
@@ -209,7 +245,7 @@
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
-<header>💬 กลุ่มแชท<span id="headerBtns"><button id="supportBtn" type="button" title="สนับสนุนเว็บ ฿20">🌈 <span class="supportLabel">สนับสนุน</span></button><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
+<header><span id="headerTitle">💬 กลุ่มแชท</span><span id="headerBtns"><button id="supportBtn" type="button" title="สนับสนุนเว็บ ฿20">🌈 <span class="supportLabel">สนับสนุน</span></button><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
 <div id="messages"></div>
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
@@ -691,7 +727,10 @@
   let soundCtx = null;
   let muted = localStorage.getItem("chatsound") === "off";
   const soundBtn = $("soundBtn");
-  const setSoundBtn = () => (soundBtn.textContent = muted ? "🔇" : "🔊");
+  const setSoundBtn = () => {
+    soundBtn.textContent = muted ? "🔇" : "🔊";
+    soundBtn.setAttribute("aria-label", muted ? "ปิดเสียง" : "เปิดเสียง");
+  };
   soundBtn.addEventListener("click", () => {
     muted = !muted;
     localStorage.setItem("chatsound", muted ? "off" : "on");
