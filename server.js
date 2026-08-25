@@ -13,7 +13,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 // โหลด .env.local ถ้ามี (ไม่พึ่ง dotenv) — env จริงของระบบชนะเสมอ
-// ไฟล์นี้เก็บ GOOGLE_CLIENT_ID / ADMIN_TOKEN — อย่าขึ้น GitHub (.gitignore มีอยู่แล้ว)
+// ไฟล์นี้เก็บ GOOGLE_CLIENT_ID / ADMIN_EMAIL — อย่าขึ้น GitHub (.gitignore มีอยู่แล้ว)
 try {
   const envFile = path.join(__dirname, ".env.local");
   if (fs.existsSync(envFile)) {
@@ -65,7 +65,7 @@ const SHOP_ITEMS = [
 // email + ชื่อจริงเก็บไว้หลังบ้านใน Supabase สำหรับผู้ดูแลเท่านั้น (ดู /admin)
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_JWKS_URL = process.env.GOOGLE_JWKS_URL || "https://www.googleapis.com/oauth2/v3/certs"; // เปลี่ยนได้ตอนทดสอบ local
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || ""; // token หน้า/API ผู้ดูแล — ถ้าไม่ตั้ง = ปิดไม่ให้เข้าถึง
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase(); // Google email ของผู้ดูแล — ถ้าไม่ตั้ง = ปิดหลังบ้าน
 const IDENTITIES_FILE = process.env.IDENTITIES_FILE || path.join(__dirname, "identities.json"); // หลังบ้าน (เก็บถาวร)
 const BANNED_FILE = process.env.BANNED_FILE || path.join(__dirname, "banned.json"); // blocklist (sub ของ Google)
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
@@ -159,9 +159,9 @@ table{border-collapse:separate;border-spacing:0;width:100%;margin-bottom:22px;ov
 #outfitPreview{display:flex;justify-content:center;align-items:center;min-height:270px;padding:16px;border:1px solid #4b3b62;border-radius:10px;background:radial-gradient(circle at 50% 20%,#2c2140,#120d1c 72%)}.admin-avatar-stack{position:relative;width:152px;height:256px}.admin-avatar-stack img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;image-rendering:pixelated}.outfit-help{font-size:12px;color:#bdb4d4}
 #partsTabs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}#partsTabs button{min-height:34px;padding:6px 11px;font-size:12px;border-color:#514064;background:#21192d;color:#cfc5df}#partsTabs button.on{border-color:#ffcc00;background:#ffcc00;color:#20152e}
 @media(max-width:760px){body{padding:18px 12px}h1{font-size:20px;padding:16px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.srow{grid-template-columns:1fr}table{display:block;overflow-x:auto;white-space:nowrap}body>p:nth-of-type(1),body>p:nth-of-type(2),body>p:nth-of-type(3){align-items:stretch}input,#q{width:100%;min-width:0}}
-</style></head><body>
+</style><script src="https://accounts.google.com/gsi/client" async defer></script></head><body>
 <h1>🍜 ศูนย์ควบคุมร้านราเมง</h1>
-<p>Admin token: <input id="tok" type="password" placeholder="ADMIN_TOKEN"> <button id="loadBtn" type="button">โหลดข้อมูล</button></p>
+<p><span id="authStatus">กรุณาเข้าสู่ระบบด้วยบัญชีผู้ดูแล</span> <span id="adminGoogle"></span> <button id="loadBtn" type="button">โหลดข้อมูลใหม่</button> <button id="logoutBtn" type="button">ออกจากระบบ</button></p>
 <p>เหตุผลการแบน: <input id="reason" placeholder="ไม่บังคับ"> (กดปุ่ม แบน ในตารางด้านล่าง)</p>
 <p>ค้นหา: <input id="q" placeholder="ชื่อเล่น / อีเมล / ชื่อจริง"> (กรองทั้ง 3 ตาราง)</p>
 <div id="err" class="bad"></div>
@@ -194,13 +194,15 @@ table{border-collapse:separate;border-spacing:0;width:100%;margin-bottom:22px;ov
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=ms=>ms?new Date(ms).toLocaleString('th-TH'):'-';
 const fmtT=ms=>new Date(ms).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
-const tok=()=>document.getElementById('tok').value;
+let adminSession=localStorage.getItem('chatsession')||'';
+const authHeaders=()=>({Authorization:'Bearer '+adminSession});
 const reason=()=>document.getElementById('reason').value;
 let DATA=null;
 async function load(){
-  const r=await fetch('/admin/users',{headers:{Authorization:'Bearer '+tok()}});
+  const r=await fetch('/admin/users',{headers:authHeaders()});
   const d=await r.json();
-  if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
+  if(!r.ok){if(r.status===401){adminSession='';localStorage.removeItem('chatsession')}document.getElementById('authStatus').textContent='ยังไม่ได้รับสิทธิ์ผู้ดูแล';document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
+  document.getElementById('authStatus').textContent='✅ เข้าสู่ระบบผู้ดูแลแล้ว';
   document.getElementById('err').textContent='';
   DATA=d;
   renderCards();
@@ -238,7 +240,7 @@ function render(){
   document.querySelectorAll('[data-admin-action]').forEach(button=>button.addEventListener('click',()=>button.dataset.adminAction==='ban'?ban(button.dataset.sub):unban(button.dataset.sub)));
 }
 async function call(path,body){
-  const r=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch(path,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();
   if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
   load();
@@ -246,7 +248,23 @@ async function call(path,body){
 async function ban(sub,name,email){await call('/admin/ban',{sub,reason:reason()});}
 async function unban(sub){await call('/admin/unban',{sub});}
 document.getElementById('loadBtn').addEventListener('click',load);
+document.getElementById('logoutBtn').addEventListener('click',()=>{adminSession='';localStorage.removeItem('chatsession');location.reload()});
 document.getElementById('q').addEventListener('input',render);
+async function adminGoogleLogin(response){
+  const r=await fetch('/google-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:response.credential})});
+  const d=await r.json();
+  if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'เข้าสู่ระบบไม่สำเร็จ');return}
+  adminSession=d.token;localStorage.setItem('chatsession',adminSession);load();
+}
+let adminGoogleReady=false;
+function initAdminGoogle(){
+  if(adminGoogleReady||!window.google)return;
+  adminGoogleReady=true;
+  google.accounts.id.initialize({client_id:__GOOGLE_CLIENT_ID_JSON__,callback:adminGoogleLogin});
+  google.accounts.id.renderButton(document.getElementById('adminGoogle'),{theme:'filled_black',shape:'pill',text:'signin_with',locale:'th'});
+}
+window.addEventListener('load',initAdminGoogle);setTimeout(initAdminGoogle,1500);
+if(adminSession)load();
 // ── สตูดิโอวาดชุด (พรีวิว sprite + วาด 16×16) ──
 const shade=(hex,f)=>{const n=parseInt(hex.slice(1),16);return 'rgb('+Math.round(((n>>16)&255)*f)+','+Math.round(((n>>8)&255)*f)+','+Math.round((n&255)*f)+')'};
 const SMAPS={
@@ -271,12 +289,12 @@ async function sSave(){
   const file=document.getElementById('sFile').files[0];
   if(!name)return err.textContent='ใส่ชื่อชิ้นส่วนก่อน';
   if(!file&&!EDITING)return err.textContent='เลือกรูป PNG ก่อน';
-  if(!tok())return err.textContent='ต้องใส่ ADMIN_TOKEN ก่อน';
+  if(!adminSession)return err.textContent='ต้องเข้าสู่ระบบด้วยบัญชีผู้ดูแลก่อน';
   const fd=new FormData();
   fd.append('name',name);fd.append('price',price);
   if(EDITING)fd.append('id',EDITING);else fd.append('type',type);
   if(file)fd.append('img',file);
-  const r=await fetch(EDITING?'/parts/update':'/parts',{method:'POST',headers:{Authorization:'Bearer '+tok()},body:fd});
+  const r=await fetch(EDITING?'/parts/update':'/parts',{method:'POST',headers:authHeaders(),body:fd});
   const d=await r.json();
   if(!r.ok)return err.textContent='❌ '+(d.error||'fail');
   err.textContent='✅ '+(EDITING?'แก้ไข':'บันทึก')+'แล้ว id='+d.id+(price?' — ขึ้นร้านค้าแล้ว 🛒':' — ทุกคนใช้ฟรี');
@@ -330,7 +348,7 @@ function renderOutfitPreview(){
   target.innerHTML='<div class="admin-avatar-stack">'+layers.map(src=>'<img src="'+esc(src)+'" alt="">').join('')+'</div>';
 }
 async function delPart(id){
-  const r=await fetch('/parts/delete',{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},body:JSON.stringify({id})});
+  const r=await fetch('/parts/delete',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({id})});
   const d=await r.json();
   if(!r.ok){document.getElementById('err').textContent='❌ '+(d.error||'fail');return}
   refreshParts();
@@ -467,7 +485,8 @@ function clientIp(req) {
   return forwarded || req.socket.remoteAddress || "unknown";
 }
 function allowRequest(req, limit, windowMs = 60_000) {
-  const key = `${clientIp(req)}:${limit}`;
+  const pathname = String(req.url || "").split("?", 1)[0];
+  const key = `${clientIp(req)}:${req.method}:${pathname}`;
   const now = Date.now();
   const bucket = rateBuckets.get(key) || [];
   const fresh = bucket.filter((at) => now - at < windowMs);
@@ -564,6 +583,24 @@ async function saveBanned() {
 }
 
 const ready = initializeState();
+
+function requireAdmin(req, res) {
+  if (!ADMIN_EMAIL) {
+    json(res, 503, { error: "ระบบยังไม่ได้ตั้งค่า ADMIN_EMAIL" });
+    return null;
+  }
+  const token = String(req.headers.authorization || "").match(/^Bearer ([a-f0-9]{64})$/i)?.[1] || "";
+  const session = sessions.get(token);
+  if (!session) {
+    json(res, 401, { error: "กรุณาเข้าสู่ระบบด้วย Google" });
+    return null;
+  }
+  if (String(session.email || "").trim().toLowerCase() !== ADMIN_EMAIL || banned.has(session.sub)) {
+    json(res, 403, { error: "บัญชี Google นี้ไม่ใช่ผู้ดูแล" });
+    return null;
+  }
+  return session;
+}
 
 async function persistOr503(res, operation) {
   try {
@@ -1078,10 +1115,7 @@ const server = http.createServer(async (req, res) => {
   }
   // อัปโหลดชิ้นส่วนใหม่ (ผู้ดูแล) — รับ PNG via FormData → เก็บไฟล์ + parts.json
   if (method === "POST" && url.pathname === "/parts") {
-    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
-      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
-      return;
-    }
+    if (!requireAdmin(req, res)) return;
     // parse multipart/form-data manually
     const boundary = req.headers["content-type"]?.match(/boundary=(.+)/)?.[1];
     if (!boundary) { json(res, 400, { error: "missing multipart boundary" }); return; }
@@ -1113,10 +1147,7 @@ const server = http.createServer(async (req, res) => {
   }
   // แก้ชื่อ/ราคา และแทนที่ PNG ของชิ้นส่วนเดิมได้ โดยคง id และเลเยอร์ไว้
   if (method === "POST" && url.pathname === "/parts/update") {
-    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
-      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
-      return;
-    }
+    if (!requireAdmin(req, res)) return;
     const boundary = req.headers["content-type"]?.match(/boundary=(.+)/)?.[1];
     if (!boundary) { json(res, 400, { error: "missing multipart boundary" }); return; }
     let uploadBuf;
@@ -1141,10 +1172,7 @@ const server = http.createServer(async (req, res) => {
   }
   // ลบชิ้นส่วนวาดเอง (ผู้ดูแล) — อวตารที่ใส่ชิ้นส่วนนี้จะคืนเป็นชุดฟรีอัตโนมัติ
   if (method === "POST" && url.pathname === "/parts/delete") {
-    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
-      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
-      return;
-    }
+    if (!requireAdmin(req, res)) return;
     let body;
     try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
@@ -1379,12 +1407,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // หลังบ้านผู้ดูแล — ต้องส่ง Authorization: Bearer <ADMIN_TOKEN> (env) — เห็น email/ชื่อจริงของผู้ใช้
+  // หลังบ้านผู้ดูแล — Bearer คือ session ของ Google account ที่ตรง ADMIN_EMAIL
   if (method === "GET" && url.pathname === "/admin/users") {
-    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
-      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
-      return;
-    }
+    if (!requireAdmin(req, res)) return;
     json(res, 200, {
       online: [...activeNames.entries()].map(([name, v]) => ({ name, avatar: v.avatar, gid: v.gid, email: v.email || "", realName: v.realName || "", lastSeen: v.lastSeen })),
       identities: [...identities.values()],
@@ -1396,10 +1421,8 @@ const server = http.createServer(async (req, res) => {
   }
   // แบน / ปลดแบน (sub ของ Google) — แบนแล้ว: เตะ session เดิมออก + login/ส่งข้อความไม่ได้ทันที
   if (method === "POST" && (url.pathname === "/admin/ban" || url.pathname === "/admin/unban")) {
-    if (!ADMIN_TOKEN || req.headers.authorization !== "Bearer " + ADMIN_TOKEN) {
-      json(res, 401, { error: "unauthorized — ต้องใช้ ADMIN_TOKEN" });
-      return;
-    }
+    const admin = requireAdmin(req, res);
+    if (!admin) return;
     let body;
     try { body = (await readBody(req, 16 * 1024)).toString(); } catch (e) { json(res, e.status || 400, { error: "request too large" }); return; }
     let data;
@@ -1412,6 +1435,10 @@ const server = http.createServer(async (req, res) => {
     const sub = String(data.sub || "").trim();
     if (!sub) {
       json(res, 400, { error: "sub required" });
+      return;
+    }
+    if (sub === admin.sub) {
+      json(res, 400, { error: "แบนบัญชีผู้ดูแลตัวเองไม่ได้" });
       return;
     }
     if (url.pathname === "/admin/ban") {
@@ -1428,10 +1455,10 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, { ok: true, banned: [...banned.values()] });
     return;
   }
-  // หน้าเว็บผู้ดูแล (โหลดข้อมูลด้วย ADMIN_TOKEN)
+  // หน้าเว็บผู้ดูแล (เข้าสู่ระบบ Google แล้วตรวจ ADMIN_EMAIL ฝั่ง server)
   if (method === "GET" && url.pathname === "/admin") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(ADMIN_HTML.replace("__CSP_NONCE__", cspNonce));
+    res.end(ADMIN_HTML.replaceAll("__CSP_NONCE__", cspNonce).replace("__GOOGLE_CLIENT_ID_JSON__", JSON.stringify(GOOGLE_CLIENT_ID)));
     return;
   }
 
@@ -1482,7 +1509,7 @@ if (require.main === module) {
       console.log(`แชทกลุ่มพร้อมแล้ว: http://localhost:${PORT} (รูปจะถูกลบหลัง ${IMAGE_TTL_MS / 1000} วิ)`);
       console.log(useSupabase ? "✅ เก็บบัญชีและชื่อรุ้งใน Supabase" : "ℹ️ local mode: เก็บบัญชีในไฟล์ JSON");
       if (!GOOGLE_CLIENT_ID) console.log("⚠️ ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID — ผู้ใช้จะ login ด้วย Google ไม่ได้ (ดู วิธีใช้.md)");
-      if (!ADMIN_TOKEN) console.log("ℹ️ ยังไม่ได้ตั้งค่า ADMIN_TOKEN — หน้า /admin ปิดอยู่");
+      if (!ADMIN_EMAIL) console.log("ℹ️ ยังไม่ได้ตั้งค่า ADMIN_EMAIL — หน้า /admin ปิดอยู่");
     });
   }).catch((error) => {
     console.error("เปิดเซิร์ฟเวอร์ไม่ได้:", error.message);

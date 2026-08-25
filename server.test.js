@@ -11,7 +11,7 @@ const os = require("node:os");
 const fs = require("node:fs");
 
 const CLIENT_ID = "test-client.apps.googleusercontent.com";
-const ADMIN_TOKEN = "secret-admin-token";
+const ADMIN_EMAIL = "admin@example.com";
 const STRIPE_WEBHOOK_SECRET = "whsec_test_chatflyfly";
 const SUPABASE_SECRET_KEY = "sb_secret_test_chatflyfly";
 
@@ -43,6 +43,7 @@ const validClaims = (over = {}) => ({
 
 let base = "";
 let api; // exports จาก server.js
+let adminSession = "";
 
 test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA จริง)", async (t) => {
   const identitiesFile = path.join(os.tmpdir(), `ramen-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
@@ -83,7 +84,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   await new Promise((r) => supabaseSrv.listen(0, "127.0.0.1", r));
 
   process.env.GOOGLE_CLIENT_ID = CLIENT_ID;
-  process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+  process.env.ADMIN_EMAIL = ADMIN_EMAIL;
   process.env.GOOGLE_JWKS_URL = jwksUrl;
   process.env.IDENTITIES_FILE = identitiesFile;
   process.env.BANNED_FILE = banFile;
@@ -143,6 +144,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     return fetch(base + p, { method: "POST", headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, ...headers }, body });
   };
   const get = (p, headers = {}) => fetch(base + p, { headers });
+  const adminHeaders = () => ({ Authorization: `Bearer ${adminSession}` });
   const savedIdentities = () => supabaseState.get("identities");
 
   t.after(async () => {
@@ -341,12 +343,17 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   });
 
   // ── /admin/users ──
-  await t.test("admin: ไม่มี/ผิด token → 401, ถูก token → เห็น email+ชื่อจริง", async () => {
+  await t.test("admin: ต้องเป็น Google session ของ ADMIN_EMAIL จึงเห็น email+ชื่อจริง", async () => {
     const no = await get("/admin/users");
     assert.equal(no.status, 401);
     const bad = await get("/admin/users", { Authorization: "Bearer wrong" });
     assert.equal(bad.status, 401);
-    const ok = await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    const adminLogin = await post("/google-login", { credential: makeJwt(validClaims({ sub: "gid-admin", email: ADMIN_EMAIL, name: "ผู้ดูแล" })) });
+    assert.equal(adminLogin.status, 200);
+    adminSession = (await adminLogin.json()).token;
+    const denied = await get("/admin/users", { Authorization: `Bearer ${sessionB}` });
+    assert.equal(denied.status, 403);
+    const ok = await get("/admin/users", adminHeaders());
     assert.equal(ok.status, 200);
     const d = await ok.json();
     const online = d.online.find((x) => x.name === "ราเมง1234");
@@ -358,6 +365,14 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(d.latest.length, 1);
     assert.equal(d.latest[0].name, "ราเมง1234");
     assert.equal(d.latest[0].text, "hi");
+    assert.equal((await post("/admin/ban", { sub: "gid-admin" }, adminHeaders())).status, 400, "ผู้ดูแลห้ามแบนตัวเอง");
+    const adminPage = await (await get("/admin")).text();
+    assert.ok(adminPage.includes(CLIENT_ID));
+    assert.ok(adminPage.includes("adminGoogle"));
+    assert.ok(!adminPage.includes("ADMIN_TOKEN"));
+    const adminScript = adminPage.match(/<script nonce="[^"]+">([\s\S]*)<\/script>/)?.[1] || "";
+    assert.ok(adminScript);
+    assert.doesNotThrow(() => new Function(adminScript));
   });
 
   // ── ข้อความเสียง (kind=voice) ──
@@ -419,12 +434,12 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   });
 
   // ── Ban / Unban (blocklist ด้วย sub ของ Google) ──
-  await t.test("ban: ต้องใช้ token, แบนแล้ว login ไม่ได้ + เตะ session, ปลดแบนกลับมาได้", async () => {
-    // ไม่มี token → 401
+  await t.test("ban: ต้องใช้ session แอดมิน, แบนแล้ว login ไม่ได้ + เตะ session, ปลดแบนกลับมาได้", async () => {
+    // ไม่มี Google session → 401
     assert.equal((await post("/admin/ban", { sub: "gid-123" })).status, 401);
 
     // แบน gid-123 (พร้อมเหตุผล)
-    const ban = await post("/admin/ban", { sub: "gid-123", reason: "สแปม" }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    const ban = await post("/admin/ban", { sub: "gid-123", reason: "สแปม" }, adminHeaders());
     assert.equal(ban.status, 200);
     assert.ok((await ban.json()).banned.some((b) => b.sub === "gid-123" && b.reason === "สแปม"));
 
@@ -439,12 +454,12 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal((await post("/google-login", { credential: makeJwt(validClaims()) })).status, 403);
 
     // banned.json ถูกเขียน + ขึ้นใน /admin/users
-    const au = await (await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` })).json();
+    const au = await (await get("/admin/users", adminHeaders())).json();
     assert.ok(au.banned.some((b) => b.sub === "gid-123"));
     assert.ok(supabaseState.get("banned").some((b) => b.sub === "gid-123"));
 
     // ปลดแบน → login ได้อีก
-    assert.equal((await post("/admin/unban", { sub: "gid-123" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 200);
+    assert.equal((await post("/admin/unban", { sub: "gid-123" }, adminHeaders())).status, 200);
     assert.equal((await post("/google-login", { credential: makeJwt(validClaims()) })).status, 200);
   });
 
@@ -472,7 +487,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(me.nickHistory[9].name, "ประวัติ3");
 
     // ผู้ดูแลเห็นผ่าน /admin/users
-    const au = await (await get("/admin/users", { Authorization: `Bearer ${ADMIN_TOKEN}` })).json();
+    const au = await (await get("/admin/users", adminHeaders())).json();
     const adm = au.identities.find((i) => i.sub === "gid-123");
     assert.equal(adm.nickHistory.length, 10);
 
@@ -605,9 +620,9 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     // ไม่มี token → 401
     assert.equal((await postMultipart("/parts", { type: "b", name: "x", price: "0", img: png })).status, 401);
     // ไม่มีรูป → 400
-    assert.equal((await postMultipart("/parts", { type: "b", name: "x", price: "0" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 400);
+    assert.equal((await postMultipart("/parts", { type: "b", name: "x", price: "0" }, adminHeaders())).status, 400);
     // admin อัปโหลดสำเร็จ → id ถัดไปของ type b = b6
-    const save = await postMultipart("/parts", { type: "b", name: "ชามลายไทย", price: "10", img: png }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    const save = await postMultipart("/parts", { type: "b", name: "ชามลายไทย", price: "10", img: png }, adminHeaders());
     assert.equal(save.status, 200);
     const sid = (await save.json()).id;
     assert.equal(sid, "b6");
@@ -628,14 +643,14 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     assert.equal(buy.status, 200);
     assert.ok((await buy.json()).owned.includes("b6"));
     // เจอ id ซ้ำไม่ได้ (กันชน) — อัปโหลดอีกชิ้น type b → b7
-    const save2 = await postMultipart("/parts", { type: "b", name: "อีกชิ้น", price: "0", img: png }, { Authorization: `Bearer ${ADMIN_TOKEN}` });
+    const save2 = await postMultipart("/parts", { type: "b", name: "อีกชิ้น", price: "0", img: png }, adminHeaders());
     assert.equal((await save2.json()).id, "b7");
     // ลบชิ้นส่วน (admin) → หายจาก /parts + ร้านค้า / ไม่มี token → 401
     assert.equal((await post("/parts/delete", { id: "b7" })).status, 401);
-    assert.equal((await post("/parts/delete", { id: "b7" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 200);
+    assert.equal((await post("/parts/delete", { id: "b7" }, adminHeaders())).status, 200);
     const after = await (await get("/parts")).json();
     assert.ok(!after.parts.some((p) => p.id === "b7"), "ลบแล้วต้องหายจาก /parts");
     // ลบของที่ไม่มี → 404
-    assert.equal((await post("/parts/delete", { id: "b7" }, { Authorization: `Bearer ${ADMIN_TOKEN}` })).status, 404);
+    assert.equal((await post("/parts/delete", { id: "b7" }, adminHeaders())).status, 404);
   });
 });
