@@ -55,6 +55,7 @@
   #todayBtn { background: #3a1224; border-color: #8b3158; color: #ffb3dc; padding: 5px 10px; }
   #matchBtn { background:#17322a; border-color:#0f5a45; color:#8fffd8; padding:5px 10px; }
   #supportBtn { background:#4a193e; border-color:#ff6ec7; color:#fff0a8; padding:5px 10px; }
+  #musicBtn { background:#17303d; border-color:#16758f; color:#8eeaff; padding:5px 10px; }
   #soundBtn { background: #241b3b; border: 2px solid #4a3d75; color: #00e5ff; padding: 5px 10px; font-size: 13px; box-shadow: 3px 3px 0 #000; }
   #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .msg { max-width: 70%; padding: 8px 12px; background: #241b36; border: 2px solid #0a0713; align-self: flex-start; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
@@ -99,6 +100,18 @@
   #voicePanelBtns button { flex: 1; }
   #voiceSend { background: #17322a; border-color: #0f5a45; }
   #toast { position: fixed; top: 16px; right: 16px; background: #2a1d4d; color: #ffcc00; border: 2px solid #0a0713; box-shadow: 3px 3px 0 #000; padding: 10px 14px; display: none; z-index: 6; }
+  #musicPanel { position:fixed; z-index:10; right:12px; bottom:70px; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 90px); overflow:auto; display:none; padding:12px; background:#111b25; border:3px solid #16758f; box-shadow:7px 7px 0 rgba(0,0,0,.7); }
+  #musicPanel.open { display:block; }
+  #musicHead { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; color:#8eeaff; }
+  #musicHead button { padding:3px 8px; border:0; box-shadow:none; background:transparent; color:#8eeaff; }
+  #musicPlayer { min-height:200px; background:#080b0f; display:grid; place-items:center; border:2px solid #0a0713; color:#6f8290; font-size:12px; }
+  #musicPlayer iframe { display:block; min-width:200px; min-height:200px; }
+  #musicNow { margin:8px 0; color:#d9f7ff; font-size:12px; line-height:1.4; overflow-wrap:anywhere; }
+  #musicStart { width:100%; padding:9px; background:#12556a; border-color:#16758f; color:#d8f8ff; }
+  #musicHelp { margin:8px 0; color:#8da4ad; font-size:11px; line-height:1.45; }
+  #musicQueue { margin:0; padding-left:24px; color:#c4d7dd; font-size:11px; }
+  #musicQueue li { margin:5px 0; overflow-wrap:anywhere; }
+  #musicQueue li:first-child { color:#8eeaff; }
   #todayPanel { position: fixed; z-index: 11; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); background: #171122; border-left: 4px solid #0a0713; box-shadow: -8px 0 0 rgba(0,0,0,.35); display: none; flex-direction: column; }
   #todayPanel.open { display: flex; }
   #todayHead { padding: 16px; border-bottom: 3px solid #0a0713; background: linear-gradient(180deg,#3a122b,#241128); display:flex; align-items:center; justify-content:space-between; color:#ffb3dc; }
@@ -192,6 +205,7 @@
     /* panel GIF/เสียง ให้ลอยเหนือ (แถบพิมพ์ + ร้าน) แทนที่จะทับ */
     #gifPanel { bottom: 70px; left: 8px; right: 8px; max-width: none; }
     #voicePanel { bottom: 70px; left: 8px; right: 8px; max-width: none; }
+    #musicPanel { right:8px; bottom:66px; width:min(340px,calc(100vw - 16px)); }
     form { padding: 10px 8px; gap: 6px; }
     form button { padding: 10px 12px; }
     #headerBtns { gap: 4px; }
@@ -208,6 +222,7 @@
     #headerBtns button { min-width: 35px; height: 34px; padding: 4px 6px; font-size: 0; box-shadow: 2px 2px 0 #000; }
     #headerBtns button::after { font-size: 16px; }
     #supportBtn::after { content: "🌈"; }
+    #musicBtn::after { content: "🎵"; }
     #matchBtn::after { content: "🎲"; }
     #todayBtn::after { content: "✦"; color: #ffb3dc; }
     #soundBtn::after { content: "🔊"; }
@@ -241,7 +256,7 @@
   <div id="floor"></div>
 </aside>
 <div id="chatSide">
-<header><span id="headerTitle">💬 กลุ่มแชท</span><span id="headerBtns"><button id="supportBtn" type="button" title="สนับสนุนเว็บ ฿20">🌈 <span class="supportLabel">สนับสนุน</span></button><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
+<header><span id="headerTitle">💬 กลุ่มแชท</span><span id="headerBtns"><button id="supportBtn" type="button" title="สนับสนุนเว็บ ฿20">🌈 <span class="supportLabel">สนับสนุน</span></button><button id="musicBtn" type="button" title="ตู้เพลงของห้อง" aria-label="เปิดตู้เพลง">🎵 เพลง</button><button id="matchBtn" title="สุ่มโต๊ะคุยตามความสนใจ">🎲 สุ่มโต๊ะ</button><button id="todayBtn" title="ฟีดชั่วคราวของวันนี้">✦ วันนี้</button><button id="soundBtn" title="เปิด/ปิดเสียงแจ้งเตือน">🔊</button><button id="nameBtn" title="เปลี่ยนชื่อ">👤</button></span></header>
 <div id="messages"></div>
 <form id="form">
   <input id="text" type="text" placeholder="พิมพ์ข้อความ..." maxlength="2000" autocomplete="off" />
@@ -252,6 +267,14 @@
 </form>
 </div>
 <div id="toast"></div>
+<section id="musicPanel" aria-label="ตู้เพลง YouTube">
+  <div id="musicHead"><b>🎵 ตู้เพลงของห้อง</b><button id="musicClose" type="button" aria-label="ปิดตู้เพลง">✕</button></div>
+  <div id="musicPlayer">กด “เริ่มฟัง” เพื่อโหลด YouTube</div>
+  <div id="musicNow">ยังไม่มีเพลงในคิว</div>
+  <button id="musicStart" type="button">▶ เริ่มฟัง</button>
+  <div id="musicHelp">เพิ่มเพลงด้วย <b>/y &lt;ลิงก์ YouTube&gt;</b><br>โฆษณาอาจทำให้แต่ละคนได้ยินไม่พร้อมกัน</div>
+  <ol id="musicQueue"><li>คิวยังว่าง</li></ol>
+</section>
 <aside id="todayPanel" aria-label="ฟีดวันนี้">
   <div id="todayHead"><div><b>✦ วันนี้</b><small>โพสต์และคอมเมนต์จะหายเองใน 24 ชั่วโมง</small></div><button id="todayClose" title="ปิด">✕</button></div>
   <form id="postForm"><textarea id="postText" maxlength="280" placeholder="วันนี้กินอะไรดี? เล่าให้ร้านฟังหน่อย…"></textarea><button type="submit">โพสต์</button></form>
@@ -684,6 +707,117 @@
     t.style.display = "block";
     setTimeout(() => (t.style.display = "none"), 3000);
   }
+
+  // ---- ตู้เพลง YouTube: server เก็บคิว, browser เล่นผ่าน Player ทางการ ----
+  const musicPanel = $("musicPanel"), musicStart = $("musicStart"), musicNow = $("musicNow"), musicList = $("musicQueue");
+  let musicQueue = [], musicListening = false, musicPlayer = null, musicReady = false, currentMusicId = "", musicFinishing = false;
+  let youtubeApiPromise = null;
+
+  function loadYouTubeApi() {
+    if (window.YT?.Player) return Promise.resolve();
+    if (youtubeApiPromise) return youtubeApiPromise;
+    youtubeApiPromise = new Promise((resolve, reject) => {
+      window.onYouTubeIframeAPIReady = resolve;
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.onerror = () => { youtubeApiPromise = null; reject(new Error("YouTube API unavailable")); };
+      document.head.appendChild(script);
+    });
+    return youtubeApiPromise;
+  }
+
+  function renderMusic() {
+    musicList.replaceChildren();
+    if (!musicQueue.length) {
+      const li = document.createElement("li"); li.textContent = "คิวยังว่าง"; musicList.appendChild(li);
+      musicNow.textContent = "ยังไม่มีเพลงในคิว";
+      if (musicReady && currentMusicId) musicPlayer.stopVideo();
+      currentMusicId = "";
+      return;
+    }
+    musicQueue.forEach((item, index) => {
+      const li = document.createElement("li");
+      li.textContent = `${index ? "รอคิว" : "กำลังเล่น"}: ${item.videoId} — เพิ่มโดย ${item.name}`;
+      musicList.appendChild(li);
+    });
+    if (!musicReady || currentMusicId !== musicQueue[0].id) musicNow.textContent = `เพลงปัจจุบัน — เพิ่มโดย ${musicQueue[0].name}`;
+  }
+
+  function ensureMusicPlayer() {
+    if (musicPlayer) return;
+    $("musicPlayer").textContent = "กำลังโหลด YouTube…";
+    musicPlayer = new window.YT.Player("musicPlayer", {
+      width: "100%", height: "200",
+      playerVars: { origin: location.origin, playsinline: 1, rel: 0 },
+      events: {
+        onReady(event) {
+          musicReady = true;
+          event.target.getIframe().setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+          playCurrentMusic();
+        },
+        onStateChange(event) {
+          if (event.data === window.YT.PlayerState.PLAYING) {
+            const title = event.target.getVideoData()?.title;
+            if (title) musicNow.textContent = `กำลังเล่น: ${title} — เพิ่มโดย ${musicQueue[0]?.name || "?"}`;
+          }
+          if (event.data === window.YT.PlayerState.ENDED) finishCurrentMusic();
+        },
+        onError: finishCurrentMusic,
+        onAutoplayBlocked() { musicListening = false; musicStart.textContent = "▶ กดเพื่อเริ่มเสียง"; toast("เบราว์เซอร์บล็อก autoplay — กดเริ่มฟังอีกครั้ง"); },
+      },
+    });
+  }
+
+  function playCurrentMusic() {
+    if (!musicListening || !musicReady || !musicQueue.length) return;
+    const current = musicQueue[0];
+    if (currentMusicId === current.id) { musicPlayer.playVideo(); return; }
+    currentMusicId = current.id;
+    musicPlayer.loadVideoById(current.videoId);
+  }
+
+  async function finishCurrentMusic() {
+    if (musicFinishing || !currentMusicId || !mySession) return;
+    musicFinishing = true;
+    try {
+      const res = await fetch("/music/ended", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ session:mySession, id:currentMusicId }) });
+      if (res.ok) currentMusicId = "";
+      else if (res.status === 409) setTimeout(finishCurrentMusic, 5000); // วิดีโอเสียเร็วมาก: รอผ่านช่วงกันยิงข้ามเพลงแล้วลองใหม่
+    } catch { /* คนอื่นที่เพลงจบจะช่วยเลื่อนคิวได้ */ }
+    musicFinishing = false;
+    pollMusic();
+  }
+
+  async function pollMusic() {
+    try {
+      const res = await fetch("/music");
+      const data = await res.json();
+      musicQueue = Array.isArray(data.queue) ? data.queue : [];
+      renderMusic();
+      playCurrentMusic();
+    } catch { /* รอบหน้าลองใหม่ */ }
+  }
+
+  $("musicBtn").addEventListener("click", () => { musicPanel.classList.add("open"); pollMusic(); });
+  $("musicClose").addEventListener("click", () => {
+    musicPanel.classList.remove("open");
+    musicListening = false;
+    musicStart.textContent = "▶ เริ่มฟัง";
+    if (musicReady) musicPlayer.pauseVideo();
+  });
+  musicStart.addEventListener("click", async () => {
+    if (!mySession) return toast("เข้าสู่ระบบด้วย Google ก่อนฟังเพลง");
+    musicListening = !musicListening;
+    musicStart.textContent = musicListening ? "⏸ หยุดฟัง" : "▶ เริ่มฟัง";
+    if (!musicListening) { if (musicReady) musicPlayer.pauseVideo(); return; }
+    try {
+      await loadYouTubeApi();
+      ensureMusicPlayer();
+      playCurrentMusic();
+    } catch { musicListening = false; musicStart.textContent = "▶ เริ่มฟัง"; toast("โหลด YouTube Player ไม่สำเร็จ"); }
+  });
+  pollMusic();
+  setInterval(pollMusic, 2000);
 
   // ดึงข้อความใหม่ทุก 1.5 วิ (polling — ใช้ได้กับ tunnel ฟรีที่บัฟเฟอร์ SSE ค้าง)
   // ส่ง ?name=xxx ไปด้วย = heartbeat ยืนยันว่ายังอยู่ในห้อง (กันชื่อถูกปลดเมื่อเผลอไป tab อื่น)

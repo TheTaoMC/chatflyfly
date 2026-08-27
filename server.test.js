@@ -108,6 +108,7 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
   process.env.BANNED_FILE = banFile;
   process.env.POINT_COOLDOWN_MS = "300"; // เทสต์เร็วๆ — cooldown สั้น
   process.env.DAILY_POINT_CAP = "6"; // เทสต์โควต้า
+  process.env.MUSIC_MIN_PLAY_MS = "0";
   process.env.PORT = "0";
   process.env.PARTS_FILE = partsFile;
   process.env.AVATARS_DIR = avatarsDir;
@@ -391,6 +392,31 @@ test("โฟลว์บังคับ Google login (JWKS ปลอม + RSA �
     const adminScript = adminPage.match(/<script nonce="[^"]+">([\s\S]*)<\/script>/)?.[1] || "";
     assert.ok(adminScript);
     assert.doesNotThrow(() => new Function(adminScript));
+  });
+
+  await t.test("music: /y รับเฉพาะ YouTube, กันเพลงซ้ำ/เกินโควต้า และเลื่อนคิวเมื่อจบ", async () => {
+    assert.equal(api.youtubeVideoId("https://youtu.be/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+    assert.equal(api.youtubeVideoId("'https://www.youtube.com/watch?v=M7lc1UVf-VE&t=3'"), "M7lc1UVf-VE");
+    assert.equal(api.youtubeVideoId("https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ"), "");
+    assert.equal(api.youtubeVideoId("file:///watch?v=dQw4w9WgXcQ"), "");
+
+    assert.equal((await post("/send", { text: "/y ไม่ใช่ลิงก์", session: sessionA })).status, 400);
+    assert.equal((await post("/send", { text: "/y https://youtu.be/dQw4w9WgXcQ", session: sessionA })).status, 200);
+    assert.equal((await post("/send", { text: "/y https://youtube.com/watch?v=dQw4w9WgXcQ", session: sessionA })).status, 409, "เพลงซ้ำไม่ได้");
+    assert.equal((await post("/send", { text: "/y https://youtube.com/shorts/M7lc1UVf-VE", session: sessionA })).status, 200);
+    assert.equal((await post("/send", { text: "/y https://youtu.be/aqz-KE-bpKQ", session: sessionA })).status, 409, "คนเดียวค้างคิวได้ไม่เกิน 2 เพลง");
+
+    let queue = (await (await get("/music")).json()).queue;
+    assert.equal(queue.length, 2);
+    assert.equal(queue[0].videoId, "dQw4w9WgXcQ");
+    assert.equal(queue[0].name, "ราเมง1234");
+    assert.equal(queue[0].sub, undefined, "ห้ามเผย Google sub");
+    assert.equal((await post("/music/ended", { session: sessionB, id: "wrong" })).status, 200);
+    assert.equal((await post("/music/ended", { session: sessionB, id: queue[0].id })).status, 200);
+    queue = (await (await get("/music")).json()).queue;
+    assert.equal(queue.length, 1);
+    assert.equal(queue[0].videoId, "M7lc1UVf-VE");
+    assert.ok(queue[0].startedAt > 0);
   });
 
   // ── ข้อความเสียง (kind=voice) ──

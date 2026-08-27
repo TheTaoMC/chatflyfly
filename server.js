@@ -36,6 +36,10 @@ const POST_TTL_MS = Number(process.env.POST_TTL_MS) || 24 * 60 * 60 * 1000;
 const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS) || 30 * 60 * 1000;
 const QUEUE_TTL_MS = 20 * 60 * 1000;
 const MAX_ROOM_TEXT = 500;
+const MAX_MUSIC_QUEUE = 20;
+const MAX_MUSIC_PER_USER = 2;
+const musicMinPlayMs = Number(process.env.MUSIC_MIN_PLAY_MS);
+const MUSIC_MIN_PLAY_MS = Number.isFinite(musicMinPlayMs) && musicMinPlayMs >= 0 ? musicMinPlayMs : 15_000;
 const MAX_IMG_BYTES = 5 * 1024 * 1024; // รูปไม่เกิน 5MB
 const MAX_JSON_BYTES = MAX_IMG_BYTES * 1.4 + 1024; // JSON upload (base64) ใหญ่สุด
 const MAX_ADMIN_UPLOAD_BYTES = 2 * 1024 * 1024; // pixel PNG ไม่ควรใหญ่กว่านี้
@@ -387,6 +391,9 @@ function parseMultipart(buf, boundary) {
 
 // ---- state ----
 const messages = []; // [{id, name, text?, img?, time}]
+const musicQueue = []; // [{id, videoId, name, sub, time, startedAt}] — restart แล้วคิวหายตามธรรมชาติของห้อง
+// ponytail: browser เครื่องแรกที่รายงานว่าเพลงจบจะเลื่อนคิวทั้งห้อง จึงอาจตัดคนที่ติดโฆษณายาวกว่าได้
+// อัปเกรดทีหลัง: เก็บรายชื่อผู้ฟังและรอ ended จากทุกคน/หมด heartbeat ก่อนเลื่อนคิว
 const posts = []; // [{id, name, text, time, expiresAt, comments: []}] — เก็บชั่วคราว ไม่เขียนลงดิสก์
 const matchQueue = new Map(); // sub -> {sub, name, tags, target, joinedAt}
 const randomRooms = new Map(); // id -> {id, users, prompt, expiresAt, messages, game}
@@ -472,6 +479,25 @@ const pushMessage = (msg) => {
     }
   }
 };
+
+// รับเฉพาะ URL ของ YouTube แล้วเก็บแค่ video id — ไม่ fetch URL จากผู้ใช้เข้าฝั่ง server
+function youtubeVideoId(input) {
+  let value = String(input || "").trim();
+  if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) value = value.slice(1, -1).trim();
+  let url;
+  try { url = new URL(value); } catch { return ""; }
+  if (!['http:', 'https:'].includes(url.protocol)) return "";
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  let id = "";
+  if (host === "youtu.be") id = url.pathname.split("/")[1] || "";
+  else if (["youtube.com", "m.youtube.com", "music.youtube.com", "youtube-nocookie.com"].includes(host)) {
+    if (url.pathname === "/watch") id = url.searchParams.get("v") || "";
+    else if (/^\/(embed|shorts|live)\//.test(url.pathname)) id = url.pathname.split("/")[2] || "";
+  }
+  return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : "";
+}
+
+const publicMusicQueue = () => musicQueue.map(({ sub, ...item }) => item);
 
 const json = (res, status, obj) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -789,7 +815,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === "/" || url.pathname === "/admin") {
-    res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
+    res.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self' https://accounts.google.com https://www.youtube.com 'nonce-${cspNonce}'; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https://*.giphy.com; connect-src 'self' https://api.giphy.com https://accounts.google.com; frame-src https://accounts.google.com https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self'; base-uri 'self'; frame-ancestors 'none'`);
   }
 
   const isStatic = method === "GET" && (url.pathname === "/" || url.pathname === "/admin" || url.pathname.startsWith("/uploads/") || url.pathname.startsWith("/avatars/") || url.pathname === "/simple/body.png");
@@ -864,6 +890,27 @@ const server = http.createServer(async (req, res) => {
     const identity = session && identities.get(session.sub);
     if (identity?.nickname) touch(identity.nickname);
     json(res, 200, { messages: messages.map(publicNamed) });
+    return;
+  }
+
+  // ตู้เพลงของห้อง: YouTube เล่นใน browser โดยตรง ฝั่ง server เก็บเฉพาะคิวและ video id
+  if (method === "GET" && url.pathname === "/music") {
+    json(res, 200, { queue: publicMusicQueue() });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/music/ended") {
+    let data;
+    try { data = JSON.parse((await readBody(req, 4 * 1024)).toString()); } catch (e) { json(res, e.status || 400, { error: "invalid json" }); return; }
+    const sess = sessions.get(String(data.session || ""));
+    if (!sess) { json(res, 401, { error: "ต้องเข้าสู่ระบบด้วย Google ก่อน" }); return; }
+    if (banned.has(sess.sub)) { json(res, 403, { error: "บัญชีนี้ถูกแบนแล้ว" }); return; }
+    const current = musicQueue[0];
+    if (!current || current.id !== String(data.id || "")) { json(res, 200, { ok: true, changed: false }); return; }
+    if (Date.now() - current.startedAt < MUSIC_MIN_PLAY_MS) { json(res, 409, { error: "เพลงยังเพิ่งเริ่มเล่น" }); return; }
+    musicQueue.shift();
+    if (musicQueue[0]) musicQueue[0].startedAt = Date.now();
+    json(res, 200, { ok: true, changed: true, queue: publicMusicQueue() });
     return;
   }
 
@@ -1384,6 +1431,18 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     touch(name);
+    if (/^\/y(?:\s|$)/i.test(text)) {
+      const videoId = youtubeVideoId(text.replace(/^\/y\s*/i, ""));
+      if (!videoId) { json(res, 400, { error: "ใช้ /y ตามด้วยลิงก์ YouTube ที่ถูกต้อง" }); return; }
+      if (musicQueue.some((item) => item.videoId === videoId)) { json(res, 409, { error: "เพลงนี้อยู่ในคิวแล้ว" }); return; }
+      if (musicQueue.filter((item) => item.sub === sessSend.sub).length >= MAX_MUSIC_PER_USER) { json(res, 409, { error: `เพิ่มได้คนละ ${MAX_MUSIC_PER_USER} เพลงในคิว` }); return; }
+      if (musicQueue.length >= MAX_MUSIC_QUEUE) { json(res, 409, { error: "คิวเพลงเต็มแล้ว กรุณารอเพลงก่อนหน้าเล่นจบ" }); return; }
+      const now = Date.now();
+      musicQueue.push({ id: `${now}-${Math.random().toString(36).slice(2, 7)}`, videoId, name, sub: sessSend.sub, time: now, startedAt: musicQueue.length ? 0 : now });
+      pushMessage({ id: `${now}-music`, name, text: `เพิ่มเพลงเข้าคิว 🎵 https://youtu.be/${videoId}`, time: now });
+      json(res, 200, { ok: true, music: true, queue: publicMusicQueue() });
+      return;
+    }
     // ชื่อมาจาก identity ของ session เท่านั้น — request ปลอมชื่อคนอื่นไม่ได้
     pushMessage({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), name, text, time: Date.now() });
     let pt;
@@ -1573,7 +1632,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, ready, verifyGoogleJwt, sessions, identities, activeNames, retiredNames, levelFor };
+module.exports = { server, ready, verifyGoogleJwt, sessions, identities, activeNames, retiredNames, levelFor, youtubeVideoId };
 
 // ponytail: เก็บข้อความใน memory เท่านั้น — server รีสตาร์ทแล้วข้อความและรูปหาย
 // อัปเกรดทีหลัง: เปลี่ยน messages เป็น SQLite (better-sqlite3) หรือเขียน append-only JSON file
